@@ -29,6 +29,8 @@ constexpr int kMaxFunctionArguments = 256;
 /// Global storage for function parameters and the return value.
 SymExpr g_return_value;
 std::array<SymExpr, kMaxFunctionArguments> g_function_arguments;
+std::array<bool, kMaxFunctionArguments>  g_function_arguments_is_int;
+uint8_t g_function_arguments_count = 0;
 // TODO make thread-local
 
 } // namespace
@@ -42,12 +44,40 @@ SymExpr _sym_get_return_expression(void) {
   return result;
 }
 
+SymExpr _sym_get_return_expression_with_truncate(uint8_t size) {
+  SymExpr expr = _sym_get_return_expression();
+  if (expr && size > 0) {
+    size_t current_bits = _sym_bits_helper(expr);
+    if (current_bits > size * 8) {
+      expr = _sym_build_trunc(expr, size * 8);
+    }
+  }
+  return expr;
+}
+
 void _sym_set_parameter_expression(uint8_t index, SymExpr expr) {
   g_function_arguments[index] = expr;
 }
 
+void _sym_set_int_parameter_expression(uint8_t index, SymExpr expr, bool is_integer) {
+  g_function_arguments[index] = expr;
+  g_function_arguments_is_int[index] = is_integer;
+}
+
+bool _sym_is_int_parameter(uint8_t index) {
+  return g_function_arguments_is_int[index];
+}
+
 SymExpr _sym_get_parameter_expression(uint8_t index) {
   return g_function_arguments[index];
+}
+
+uint8_t _sym_get_args_count(void) {
+  return g_function_arguments_count;
+}
+
+void _sym_set_args_count(uint8_t n) {
+  g_function_arguments_count = n;
 }
 
 void _sym_memcpy(uint8_t *dest, const uint8_t *src, size_t length) {
@@ -94,7 +124,7 @@ SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
     return nullptr;
 
   ReadOnlyShadow shadow(addr, length);
-  return std::accumulate(shadow.begin_non_null(), shadow.end_non_null(),
+  SymExpr res = std::accumulate(shadow.begin_non_null(), shadow.end_non_null(),
                          static_cast<SymExpr>(nullptr),
                          [&](SymExpr result, SymExpr byteExpr) {
                            if (result == nullptr)
@@ -104,6 +134,7 @@ SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
                                       ? _sym_concat_helper(byteExpr, result)
                                       : _sym_concat_helper(result, byteExpr);
                          });
+  return res;
 }
 
 void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,

@@ -36,6 +36,7 @@ extern "C" {
  * Initialization
  */
 void _sym_initialize(void);
+void _sym_initialize_qemu(void);
 
 /*
  * Construction of simple values
@@ -132,9 +133,14 @@ size_t _sym_bits_helper(SymExpr expr);
  * Function-call helpers
  */
 void _sym_set_parameter_expression(uint8_t index, SymExpr expr);
+void _sym_set_int_parameter_expression(uint8_t index, SymExpr expr, bool is_int);
 SymExpr _sym_get_parameter_expression(uint8_t index);
+bool _sym_is_int_parameter(uint8_t index);
+uint8_t _sym_get_args_count(void);
+void _sym_set_args_count(uint8_t index);
 void _sym_set_return_expression(SymExpr expr);
 SymExpr _sym_get_return_expression(void);
+SymExpr _sym_get_return_expression_with_truncate(uint8_t size);
 
 /*
  * Constraint handling
@@ -158,6 +164,7 @@ SymExpr _sym_build_extract(SymExpr expr, uint64_t offset, uint64_t length,
 /*
  * Call-stack tracing
  */
+void _sym_update_call(uintptr_t site_id);
 void _sym_notify_call(uintptr_t site_id);
 void _sym_notify_ret(uintptr_t site_id);
 void _sym_notify_basic_block(uintptr_t site_id);
