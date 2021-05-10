@@ -114,9 +114,15 @@ int SYM(open)(const char *path, int oflag, mode_t mode) {
   if (result >= 0 && !g_config.fullyConcrete && !g_config.inputFile.empty() &&
       strstr(path, g_config.inputFile.c_str()) != nullptr) {
     if (inputFileDescriptor != -1)
+    {
+#if 0
       std::cerr << "Warning: input file opened multiple times; this is not yet "
                    "supported"
                 << std::endl;
+#endif
+      // we have already done internally the open()
+      assert(inputOffset == 0 && inputFileDescriptor == result);
+    }
     inputFileDescriptor = result;
     inputOffset = 0;
   }
@@ -138,7 +144,9 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
     // Reading symbolic input.
     ReadWriteShadow shadow(buf, result);
     std::generate(shadow.begin(), shadow.end(),
-                  []() { return _sym_get_input_byte(inputOffset++); });
+                  []() { 
+                    return _sym_get_input_byte(inputOffset++); 
+                  });
   } else if (!isConcrete(buf, result)) {
     ReadWriteShadow shadow(buf, result);
     std::fill(shadow.begin(), shadow.end(), nullptr);
@@ -197,13 +205,20 @@ FILE *SYM(fopen)(const char *pathname, const char *mode) {
       !g_config.inputFile.empty() &&
       strstr(pathname, g_config.inputFile.c_str()) != nullptr) {
     if (inputFileDescriptor != -1)
+    {
+#if 0
       std::cerr << "Warning: input file opened multiple times; this is not yet "
                    "supported"
                 << std::endl;
+#endif
+      // we have already done internally the open()
+      assert(inputOffset == 0 && inputFileDescriptor == fileno(result));
+    }
     inputFileDescriptor = fileno(result);
     inputOffset = 0;
   }
 
+  printf("PIPPO\n");
   return result;
 }
 
@@ -215,9 +230,15 @@ FILE *SYM(fopen64)(const char *pathname, const char *mode) {
       !g_config.inputFile.empty() &&
       strstr(pathname, g_config.inputFile.c_str()) != nullptr) {
     if (inputFileDescriptor != -1)
+    {
+#if 0
       std::cerr << "Warning: input file opened multiple times; this is not yet "
                    "supported"
                 << std::endl;
+#endif
+      // we have already done internally the open()
+      assert(inputOffset == 0 && inputFileDescriptor == fileno(result));
+    }
     inputFileDescriptor = fileno(result);
     inputOffset = 0;
   }
@@ -237,7 +258,9 @@ size_t SYM(fread)(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     // Reading symbolic input.
     ReadWriteShadow shadow(ptr, result * size);
     std::generate(shadow.begin(), shadow.end(),
-                  []() { return _sym_get_input_byte(inputOffset++); });
+                  []() { 
+                    return _sym_get_input_byte(inputOffset++); 
+                  });
   } else if (!isConcrete(ptr, result * size)) {
     ReadWriteShadow shadow(ptr, result * size);
     std::fill(shadow.begin(), shadow.end(), nullptr);

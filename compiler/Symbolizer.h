@@ -199,6 +199,14 @@ private:
     return (exprIt != symbolicExpressions.end()) ? exprIt->second : nullptr;
   }
 
+  bool isArgInteger(llvm::Value *V) {
+    llvm::Type* type = V->getType();
+    bool is_int = type->isIntegerTy() || type->isPointerTy(); 
+    if (!is_int)
+      llvm::errs() << "Type: " << *type << " is_int=" << is_int << "\n";
+    return is_int;
+  }
+
   llvm::Value *getSymbolicExpressionOrNull(llvm::Value *V) {
     auto *expr = getSymbolicExpression(V);
     if (expr == nullptr)

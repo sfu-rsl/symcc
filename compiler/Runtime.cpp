@@ -75,10 +75,17 @@ Runtime::Runtime(Module &M) {
 
   setParameterExpression =
       import(M, "_sym_set_parameter_expression", voidT, int8T, ptrT);
+  setIntParameterExpression =
+      import(M, "_sym_set_int_parameter_expression", voidT, int8T, ptrT, int8T);
   getParameterExpression =
       import(M, "_sym_get_parameter_expression", ptrT, int8T);
+  isIntParameter =
+      import(M, "_sym_is_int_parameter", int8T);
+  setParameterCount =
+      import(M, "_sym_set_args_count", voidT, int8T);
   setReturnExpression = import(M, "_sym_set_return_expression", voidT, ptrT);
   getReturnExpression = import(M, "_sym_get_return_expression", ptrT);
+  getReturnExpressionWithTruncate = import(M, "_sym_get_return_expression_with_truncate", ptrT, int8T);
 
 #define LOAD_BINARY_OPERATOR_HANDLER(constant, name)                           \
   binaryOperatorHandlers[Instruction::constant] =                              \
@@ -158,10 +165,17 @@ Runtime::Runtime(Module &M) {
 /// Decide whether a function is called symbolically.
 bool isInterceptedFunction(const Function &f) {
   static const StringSet<> kInterceptedFunctions = {
+    // safe to run models instead of the actual user implementation
+    "memcpy", "memset", "strncpy", "strchr",
+    "memcmp",   "memmove", "ntohl",
+    // these are not safe (e.g., they allocate blocks) to run
+    // natively. We handle them during emulation.
+    /*
       "malloc",   "calloc",  "mmap",    "mmap64", "open",   "read",    "lseek",
       "lseek64",  "fopen",   "fopen64", "fread",  "fseek",  "fseeko",  "rewind",
-      "fseeko64", "getc",    "ungetc",  "memcpy", "memset", "strncpy", "strchr",
-      "memcmp",   "memmove", "ntohl",   "fgets",  "fgetc"};
+      "fseeko64", "getc",    "ungetc", "fgets",  "fgetc"
+    */
+  };
 
   return (kInterceptedFunctions.count(f.getName()) > 0);
 }

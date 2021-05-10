@@ -115,7 +115,9 @@ namespace fs = std::filesystem;
 namespace fs = std::experimental::filesystem;
 #endif
 
-void _sym_initialize(void) {
+void _sym_initialize(void) {}
+
+void _sym_initialize_qemu(void) {
   if (g_initialized.test_and_set())
     return;
 
@@ -354,6 +356,11 @@ UNSUPPORTED(SymExpr _sym_build_float_to_unsigned_integer(SymExpr, uint8_t))
 
 void _sym_notify_call(uintptr_t site_id) {
   g_call_stack_manager.visitCall(site_id);
+}
+
+void _sym_update_call(uintptr_t site_id) {
+  assert(0);
+  // g_call_stack_manager.updateVisitCall(site_id);
 }
 
 void _sym_notify_ret(uintptr_t site_id) {

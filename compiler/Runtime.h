@@ -53,7 +53,11 @@ struct Runtime {
   SymFnT pushPathConstraint{};
   SymFnT getParameterExpression{};
   SymFnT setParameterExpression{};
+  SymFnT setParameterCount{};
+  SymFnT setIntParameterExpression{};
   SymFnT setReturnExpression{};
+  SymFnT isIntParameter{};
+  SymFnT getReturnExpressionWithTruncate{};
   SymFnT getReturnExpression{};
   SymFnT memcpy{};
   SymFnT memset{};

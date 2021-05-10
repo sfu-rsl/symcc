@@ -317,9 +317,29 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
     tryAlternative(IRB, I.getCalledOperand());
 
   for (Use &arg : I.args())
-    IRB.CreateCall(runtime.setParameterExpression,
+    IRB.CreateCall(runtime.setIntParameterExpression,
                    {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
-                    getSymbolicExpressionOrNull(arg)});
+                    getSymbolicExpressionOrNull(arg),
+                    ConstantInt::get(IRB.getInt8Ty(), isArgInteger(arg))});
+                    
+  IRB.CreateCall(runtime.setParameterCount,
+                   ConstantInt::get(IRB.getInt8Ty(), I.getNumArgOperands()));
+
+  FunctionType *ft = I.getFunctionType();
+  Type * retType = ft->getReturnType();
+
+#if 0
+  Function *fun = I.getCalledFunction();
+  if (fun) 
+    errs() << "Function " << fun->getName() << ": " << *retType << '\n';
+#endif
+
+  uint8_t retValSize = 0;
+  if (!retType->isVoidTy()) {
+    TypeSize size = dataLayout.getTypeStoreSize(retType);
+    ConstantInt* v = ConstantInt::get(IRB.getInt8Ty(), size);
+    retValSize = (uint8_t) v->getZExtValue();
+  }
 
   if (!I.user_empty()) {
     // The result of the function is used somewhere later on. Since we have no
@@ -333,7 +353,8 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
     IRB.CreateCall(runtime.setReturnExpression,
                    ConstantPointerNull::get(IRB.getInt8PtrTy()));
     IRB.SetInsertPoint(returnPoint);
-    symbolicExpressions[&I] = IRB.CreateCall(runtime.getReturnExpression);
+    symbolicExpressions[&I] = IRB.CreateCall(runtime.getReturnExpressionWithTruncate, 
+      ConstantInt::get(IRB.getInt8Ty(), retValSize));
   }
 }
 

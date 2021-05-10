@@ -36,6 +36,7 @@
 #define P(ptr) reinterpret_cast<void *>(ptr)
 #endif
 
+
 #define FSORT(is_double)                                                       \
   ((is_double) ? Z3_mk_fpa_sort_double(g_context)                              \
                : Z3_mk_fpa_sort_single(g_context))
@@ -105,7 +106,9 @@ SymExpr registerExpression(Z3_ast expr) {
 
 } // namespace
 
-void _sym_initialize(void) {
+void _sym_initialize(void) {}
+
+void _sym_initialize_qemu(void) {
   if (g_initialized.test_and_set())
     return;
 
