@@ -175,11 +175,20 @@ void _sym_notify_basic_block(uintptr_t site_id);
 const char *_sym_expr_to_string(SymExpr expr); // statically allocated
 bool _sym_feasible(SymExpr expr);
 
+void _sym_print_path_constraints(void);
+void _sym_debug_function_after_return(uint8_t *addr);
+
 /*
  * Garbage collection
  */
 void _sym_register_expression_region(SymExpr *start, size_t length);
 void _sym_collect_garbage(void);
+
+void _sym_analysis_mode(int mode);
+
+void _sym_libc_memset(uint8_t *s, int c, size_t n);
+void _sym_libc_memcpy(void *dest, const void *src, size_t n);
+void _sym_libc_memmove(void *dest, const void *src, size_t n);
 
 #ifdef __cplusplus
 }

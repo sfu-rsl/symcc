@@ -194,46 +194,43 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
   case Intrinsic::memcpy: {
     IRBuilder<> IRB(&I);
 
-    tryAlternative(IRB, I.getOperand(0));
-    tryAlternative(IRB, I.getOperand(1));
-    tryAlternative(IRB, I.getOperand(2));
-
     // The intrinsic allows both 32 and 64-bit integers to specify the length;
     // convert to the right type if necessary. This may truncate the value on
     // 32-bit architectures. However, what's the point of specifying a length to
     // memcpy that is larger than your address space?
 
-    IRB.CreateCall(runtime.memcpy,
-                   {I.getOperand(0), I.getOperand(1),
-                    IRB.CreateZExtOrTrunc(I.getOperand(2), intPtrType)});
+    IRB.CreateCall(runtime.LibcMemcpy,
+                   {I.getOperand(0),
+                    I.getOperand(1),
+                    I.getOperand(2)});
+
+    I.eraseFromParent();
     break;
   }
   case Intrinsic::memset: {
     IRBuilder<> IRB(&I);
 
-    tryAlternative(IRB, I.getOperand(0));
-    tryAlternative(IRB, I.getOperand(2));
-
     // The comment on memcpy's length parameter applies analogously.
 
-    IRB.CreateCall(runtime.memset,
+    IRB.CreateCall(runtime.LibcMemset,
                    {I.getOperand(0),
-                    getSymbolicExpressionOrNull(I.getOperand(1)),
-                    IRB.CreateZExtOrTrunc(I.getOperand(2), intPtrType)});
+                    I.getOperand(1),
+                    I.getOperand(2)});
+
+    I.eraseFromParent();
     break;
   }
   case Intrinsic::memmove: {
     IRBuilder<> IRB(&I);
 
-    tryAlternative(IRB, I.getOperand(0));
-    tryAlternative(IRB, I.getOperand(1));
-    tryAlternative(IRB, I.getOperand(2));
-
     // The comment on memcpy's length parameter applies analogously.
 
-    IRB.CreateCall(runtime.memmove,
-                   {I.getOperand(0), I.getOperand(1),
-                    IRB.CreateZExtOrTrunc(I.getOperand(2), intPtrType)});
+    IRB.CreateCall(runtime.LibcMemmove,
+                   {I.getOperand(0),
+                    I.getOperand(1),
+                    I.getOperand(2)});
+
+    I.eraseFromParent();
     break;
   }
   case Intrinsic::stacksave: {
@@ -316,23 +313,44 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
   if (callee == nullptr)
     tryAlternative(IRB, I.getCalledOperand());
 
-  for (Use &arg : I.args())
-    IRB.CreateCall(runtime.setIntParameterExpression,
-                   {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
-                    getSymbolicExpressionOrNull(arg),
-                    ConstantInt::get(IRB.getInt8Ty(), isArgInteger(arg))});
-                    
-  IRB.CreateCall(runtime.setParameterCount,
-                   ConstantInt::get(IRB.getInt8Ty(), I.getNumArgOperands()));
-
   FunctionType *ft = I.getFunctionType();
   Type * retType = ft->getReturnType();
 
-#if 0
+  bool concretizeArg = false;
+#if 1
   Function *fun = I.getCalledFunction();
-  if (fun) 
-    errs() << "Function " << fun->getName() << ": " << *retType << '\n';
+  if (fun) {
+    // errs() << "Function " << fun->getName() << ": " << *retType << '\n';
+
+    if (fun->getName() == "malloc" 
+        || fun->getName() == "free" 
+        || fun->getName() == "calloc" 
+        || fun->getName() == "realloc"
+        || fun->getName() == "fopen"
+        || fun->getName() == "fread"
+        || fun->getName() == "ftell"
+        || fun->getName() == "fseek"
+        ) {
+      errs() << "\nConcretizing args for function " << fun->getName() << ": " << *retType << "\n\n";
+      concretizeArg = true;
+    }
+  }
 #endif
+
+  for (Use &arg : I.args()) {
+    if (concretizeArg)
+      tryAlternative(IRB, arg);
+    IRB.CreateCall(runtime.setIntParameterExpression,
+                   {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
+                    concretizeArg 
+                      ? llvm::ConstantPointerNull::get(
+                          llvm::IntegerType::getInt8PtrTy(arg->getContext()))
+                      : getSymbolicExpressionOrNull(arg),
+                    ConstantInt::get(IRB.getInt8Ty(), isArgInteger(arg))});
+  }
+
+  IRB.CreateCall(runtime.setParameterCount,
+                   ConstantInt::get(IRB.getInt8Ty(), I.getNumArgOperands()));
 
   uint8_t retValSize = 0;
   if (!retType->isVoidTy()) {
@@ -353,8 +371,45 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
     IRB.CreateCall(runtime.setReturnExpression,
                    ConstantPointerNull::get(IRB.getInt8PtrTy()));
     IRB.SetInsertPoint(returnPoint);
-    symbolicExpressions[&I] = IRB.CreateCall(runtime.getReturnExpressionWithTruncate, 
-      ConstantInt::get(IRB.getInt8Ty(), retValSize));
+#if 0
+    if (fun && fun->getName() == "fread")
+    {
+      // IRB.CreateCall(runtime.printPathConstraints);
+      IRB.CreateCall(runtime.debugFunctionAfterReturn, 
+        // createValueExpression(I.getArgOperand(0), IRB)
+        I.getArgOperand(0)
+      );
+    }
+#endif
+    if (fun && (
+          fun->getName() == "malloc" 
+          || fun->getName() == "free" 
+          || fun->getName() == "calloc"
+          || fun->getName() == "realloc"
+          || fun->getName() == "ftell"
+          || fun->getName() == "fseek"
+          || fun->getName() == "fread"
+          || fun->getName() == "fclose"
+          || fun->getName() == "fopen"
+          )) 
+    {
+#if 0
+      if (fun->getName() == "fread")
+      {
+        // IRB.CreateCall(runtime.printPathConstraints);
+        IRB.CreateCall(runtime.debugFunctionAfterReturn, 
+          // createValueExpression(I.getArgOperand(0), IRB)
+          I.getArgOperand(0)
+        );
+      }
+#endif
+      symbolicExpressions[&I] = nullptr;
+    } 
+    else 
+    {
+      symbolicExpressions[&I] = IRB.CreateCall(runtime.getReturnExpressionWithTruncate, 
+        ConstantInt::get(IRB.getInt8Ty(), retValSize));
+    }
   }
 }
 

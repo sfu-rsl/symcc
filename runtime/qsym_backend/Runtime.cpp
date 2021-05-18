@@ -288,6 +288,9 @@ void _sym_push_path_constraint(SymExpr constraint, int taken,
   if (constraint == nullptr)
     return;
 
+  // const char *s_expr = _sym_expr_to_string(constraint);
+  // printf("pushing constraint: %s\n", s_expr);
+  
   g_solver->addJcc(allocatedExpressions.at(constraint), taken != 0, site_id);
 }
 
@@ -404,6 +407,9 @@ bool _sym_feasible(SymExpr expr) {
 void _sym_collect_garbage() {
   if (allocatedExpressions.size() < g_config.garbageCollectionThreshold)
     return;
+
+  printf("GARBAGE COLLECTOR\n");
+  return;
 
 #ifdef DEBUG_RUNTIME
   auto start = std::chrono::high_resolution_clock::now();

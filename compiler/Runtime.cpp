@@ -160,6 +160,13 @@ Runtime::Runtime(Module &M) {
   notifyCall = import(M, "_sym_notify_call", voidT, intPtrType);
   notifyRet = import(M, "_sym_notify_ret", voidT, intPtrType);
   notifyBasicBlock = import(M, "_sym_notify_basic_block", voidT, intPtrType);
+
+  printPathConstraints = import(M, "_sym_print_path_constraints", voidT);
+  debugFunctionAfterReturn = import(M, "_sym_debug_function_after_return", voidT, ptrT);
+
+  LibcMemset = import(M, "_sym_libc_memset", voidT, ptrT, int8T, IRB.getInt64Ty());
+  LibcMemcpy = import(M, "_sym_libc_memcpy", voidT, ptrT, ptrT, IRB.getInt64Ty());
+  LibcMemmove = import(M, "_sym_libc_memmove", voidT, ptrT, ptrT, IRB.getInt64Ty());
 }
 
 /// Decide whether a function is called symbolically.

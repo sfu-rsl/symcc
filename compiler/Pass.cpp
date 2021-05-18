@@ -43,16 +43,20 @@ bool SymbolizePass::doInitialization(Module &M) {
   // rename internal functions.
   for (auto &function : M.functions()) {
     auto name = function.getName();
-    if (isInterceptedFunction(function))
+    if (isInterceptedFunction(function)) {
       function.setName(name + "_symbolized");
+      // errs() << "Renaming function to " << function.getName() << "\n";
+    } else {
+      // errs() << "Leaving function " << function.getName() << "\n";
+    }
   }
-
+#if 0
   // Insert a constructor that initializes the runtime and any globals.
   Function *ctor;
   std::tie(ctor, std::ignore) = createSanitizerCtorAndInitFunctions(
       M, kSymCtorName, "_sym_initialize", {}, {});
   appendToGlobalCtors(M, ctor, 0);
-
+#endif
   return true;
 }
 

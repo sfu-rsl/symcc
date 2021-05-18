@@ -69,6 +69,13 @@ struct Runtime {
   SymFnT notifyRet{};
   SymFnT notifyBasicBlock{};
 
+  SymFnT debugFunctionAfterReturn{};
+  SymFnT printPathConstraints{};
+
+  SymFnT LibcMemset{};
+  SymFnT LibcMemcpy{};
+  SymFnT LibcMemmove{};
+
   /// Mapping from icmp predicates to the functions that build the corresponding
   /// symbolic expressions.
   std::array<SymFnT, llvm::CmpInst::BAD_ICMP_PREDICATE>

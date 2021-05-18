@@ -121,7 +121,7 @@ int SYM(open)(const char *path, int oflag, mode_t mode) {
                 << std::endl;
 #endif
       // we have already done internally the open()
-      assert(inputOffset == 0 && inputFileDescriptor == result);
+      // assert(inputOffset == 0 && inputFileDescriptor == result);
     }
     inputFileDescriptor = result;
     inputOffset = 0;
@@ -394,41 +394,47 @@ int SYM(ungetc)(int c, FILE *stream) {
   return result;
 }
 
-void *SYM(memcpy)(void *dest, const void *src, size_t n) {
-  auto *result = memcpy(dest, src, n);
+extern "C" {
+  void *SYM(memcpy)(void *dest, const void *src, size_t n) {
+    auto *result = memcpy(dest, src, n);
 
-  tryAlternative(dest, _sym_get_parameter_expression(0), SYM(memcpy));
-  tryAlternative(src, _sym_get_parameter_expression(1), SYM(memcpy));
-  tryAlternative(n, _sym_get_parameter_expression(2), SYM(memcpy));
+    tryAlternative(dest, _sym_get_parameter_expression(0), SYM(memcpy));
+    tryAlternative(src, _sym_get_parameter_expression(1), SYM(memcpy));
+    tryAlternative(n, _sym_get_parameter_expression(2), SYM(memcpy));
 
-  _sym_memcpy(static_cast<uint8_t *>(dest), static_cast<const uint8_t *>(src),
-              n);
-  _sym_set_return_expression(_sym_get_parameter_expression(0));
-  return result;
+    _sym_memcpy(static_cast<uint8_t *>(dest), static_cast<const uint8_t *>(src),
+                n);
+    _sym_set_return_expression(_sym_get_parameter_expression(0));
+    return result;
+  }
 }
 
-void *SYM(memset)(void *s, int c, size_t n) {
-  auto *result = memset(s, c, n);
+extern "C" {
+  void *SYM(memset)(void *s, int c, size_t n) {
+    void *result = memset(s, c, n);
 
-  tryAlternative(s, _sym_get_parameter_expression(0), SYM(memset));
-  tryAlternative(n, _sym_get_parameter_expression(2), SYM(memset));
+    tryAlternative(s, _sym_get_parameter_expression(0), SYM(memset));
+    tryAlternative(n, _sym_get_parameter_expression(2), SYM(memset));
 
-  _sym_memset(static_cast<uint8_t *>(s), _sym_get_parameter_expression(1), n);
-  _sym_set_return_expression(_sym_get_parameter_expression(0));
-  return result;
+    _sym_memset(static_cast<uint8_t *>(s), _sym_get_parameter_expression(1), n);
+    _sym_set_return_expression(_sym_get_parameter_expression(0));
+    return result;
+  }
 }
 
-void *SYM(memmove)(void *dest, const void *src, size_t n) {
-  tryAlternative(dest, _sym_get_parameter_expression(0), SYM(memmove));
-  tryAlternative(src, _sym_get_parameter_expression(1), SYM(memmove));
-  tryAlternative(n, _sym_get_parameter_expression(2), SYM(memmove));
+extern "C" {
+  void *SYM(memmove)(void *dest, const void *src, size_t n) {
+    tryAlternative(dest, _sym_get_parameter_expression(0), SYM(memmove));
+    tryAlternative(src, _sym_get_parameter_expression(1), SYM(memmove));
+    tryAlternative(n, _sym_get_parameter_expression(2), SYM(memmove));
 
-  auto *result = memmove(dest, src, n);
-  _sym_memmove(static_cast<uint8_t *>(dest), static_cast<const uint8_t *>(src),
-               n);
+    auto *result = memmove(dest, src, n);
+    _sym_memmove(static_cast<uint8_t *>(dest), static_cast<const uint8_t *>(src),
+                n);
 
-  _sym_set_return_expression(_sym_get_parameter_expression(0));
-  return result;
+    _sym_set_return_expression(_sym_get_parameter_expression(0));
+    return result;
+  }
 }
 
 char *SYM(strncpy)(char *dest, const char *src, size_t n) {

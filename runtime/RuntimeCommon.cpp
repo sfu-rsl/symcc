@@ -22,6 +22,8 @@
 #include "Shadow.h"
 #include "GarbageCollection.h"
 
+#include "LibcWrappers.h"
+
 namespace {
 
 constexpr int kMaxFunctionArguments = 256;
@@ -134,6 +136,10 @@ SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
                                       ? _sym_concat_helper(byteExpr, result)
                                       : _sym_concat_helper(result, byteExpr);
                          });
+#if 0
+  const char *s_expr = _sym_expr_to_string(res);
+  printf("MEMORY READ at %p: %s\n", addr, s_expr);
+#endif
   return res;
 }
 
@@ -197,3 +203,32 @@ SymExpr _sym_build_bswap(SymExpr expr) {
 void _sym_register_expression_region(SymExpr *start, size_t length) {
   registerExpressionRegion({start, length});
 }
+
+void _sym_print_path_constraints(void) {
+  printf("HERE\n");
+}
+
+void _sym_debug_function_after_return(uint8_t *addr) {
+  printf("FREAD(%p)\n", addr);
+  for (int i = 0; i < 0xda + 1; i++) {
+    SymExpr v = _sym_read_memory(addr + i, 1, 1);
+    if (v) {
+      const char *s_expr = _sym_expr_to_string(v);
+      printf("memory value: %s\n", s_expr);
+    } else {
+      printf("memory value: NULL\n");
+    }
+  }
+}
+
+void _sym_libc_memset(uint8_t *s, int c, size_t n) {
+  memset_symbolized(s, c, n);
+} 
+
+void _sym_libc_memcpy(void *dest, const void *src, size_t n) {
+  memcpy_symbolized(dest, src, n);
+} 
+
+void _sym_libc_memmove(void *dest, const void *src, size_t n) {
+  memmove_symbolized(dest, src, n);
+} 

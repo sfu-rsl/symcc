@@ -21,4 +21,10 @@
 /// to symbolic input.
 void initLibcWrappers();
 
+extern "C" {
+  void* memcpy_symbolized(void *dest, const void *src, size_t n);
+  void* memset_symbolized(void *s, int c, size_t n);
+  void* memmove_symbolized(void *dest, const void *src, size_t n);
+}
+
 #endif
