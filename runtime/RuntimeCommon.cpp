@@ -160,6 +160,10 @@ void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,
   if (expr == nullptr) {
     std::fill(shadow.begin(), shadow.end(), nullptr);
   } else {
+#if 0
+    const char *s_expr = _sym_expr_to_string(expr);
+    printf("MEMORY WRITE at %p: %s\n", addr, s_expr);
+#endif
     size_t i = 0;
     for (SymExpr &byteShadow : shadow) {
       byteShadow = little_endian

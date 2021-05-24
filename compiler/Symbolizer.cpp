@@ -199,6 +199,16 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     // 32-bit architectures. However, what's the point of specifying a length to
     // memcpy that is larger than your address space?
 
+    for (Use &arg : I.args()) {
+      IRB.CreateCall(runtime.setIntParameterExpression,
+                    {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
+                      getSymbolicExpressionOrNull(arg),
+                      ConstantInt::get(IRB.getInt8Ty(), isArgInteger(arg))});
+    }
+
+    IRB.CreateCall(runtime.setParameterCount,
+                    ConstantInt::get(IRB.getInt8Ty(), I.getNumArgOperands()));
+
     IRB.CreateCall(runtime.LibcMemcpy,
                    {I.getOperand(0),
                     I.getOperand(1),
@@ -212,6 +222,16 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
 
     // The comment on memcpy's length parameter applies analogously.
 
+    for (Use &arg : I.args()) {
+      IRB.CreateCall(runtime.setIntParameterExpression,
+                    {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
+                      getSymbolicExpressionOrNull(arg),
+                      ConstantInt::get(IRB.getInt8Ty(), isArgInteger(arg))});
+    }
+
+    IRB.CreateCall(runtime.setParameterCount,
+                    ConstantInt::get(IRB.getInt8Ty(), I.getNumArgOperands()));
+
     IRB.CreateCall(runtime.LibcMemset,
                    {I.getOperand(0),
                     I.getOperand(1),
@@ -224,6 +244,16 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     IRBuilder<> IRB(&I);
 
     // The comment on memcpy's length parameter applies analogously.
+
+    for (Use &arg : I.args()) {
+      IRB.CreateCall(runtime.setIntParameterExpression,
+                    {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
+                      getSymbolicExpressionOrNull(arg),
+                      ConstantInt::get(IRB.getInt8Ty(), isArgInteger(arg))});
+    }
+
+    IRB.CreateCall(runtime.setParameterCount,
+                    ConstantInt::get(IRB.getInt8Ty(), I.getNumArgOperands()));
 
     IRB.CreateCall(runtime.LibcMemmove,
                    {I.getOperand(0),
