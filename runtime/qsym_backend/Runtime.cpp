@@ -287,10 +287,10 @@ void _sym_push_path_constraint(SymExpr constraint, int taken,
                                uintptr_t site_id) {
   if (constraint == nullptr)
     return;
-
-  // const char *s_expr = _sym_expr_to_string(constraint);
-  // printf("pushing constraint: %s\n", s_expr);
-  
+#if 0
+  const char *s_expr = _sym_expr_to_string(constraint);
+  printf("QUERY AT %lx: %s\n", site_id, s_expr);
+#endif  
   g_solver->addJcc(allocatedExpressions.at(constraint), taken != 0, site_id);
 }
 
