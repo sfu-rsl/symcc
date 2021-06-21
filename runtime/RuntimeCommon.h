@@ -135,6 +135,7 @@ size_t _sym_bits_helper(SymExpr expr);
 void _sym_set_parameter_expression(uint8_t index, SymExpr expr);
 void _sym_set_int_parameter_expression(uint8_t index, SymExpr expr, bool is_int);
 SymExpr _sym_get_parameter_expression(uint8_t index);
+SymExpr _sym_get_parameter_expression_with_truncate(uint8_t index, uint8_t size);
 bool _sym_is_int_parameter(uint8_t index);
 uint8_t _sym_get_args_count(void);
 void _sym_set_args_count(uint8_t index);
@@ -164,6 +165,7 @@ SymExpr _sym_build_extract(SymExpr expr, uint64_t offset, uint64_t length,
 /*
  * Call-stack tracing
  */
+uintptr_t _sym_get_call_site(void);
 void _sym_update_call(uintptr_t site_id);
 void _sym_notify_call(uintptr_t site_id);
 void _sym_notify_ret(uintptr_t site_id);
@@ -189,6 +191,13 @@ void _sym_analysis_mode(int mode);
 void _sym_libc_memset(uint8_t *s, int c, size_t n);
 void _sym_libc_memcpy(void *dest, const void *src, size_t n);
 void _sym_libc_memmove(void *dest, const void *src, size_t n);
+
+uint64_t _sym_wrap_indirect_call_int(uint64_t target);
+void _sym_indirect_call_set_arg_int(uint8_t index, uint64_t value, int8_t size);
+void _sym_indirect_call_set_arg_count(uint8_t count);
+uint64_t _sym_indirect_call_get_arg_int(uint8_t index);
+void _sym_wrap_indirect_call_set_trumpoline(uint64_t target);
+void _sym_check_indirect_call_target(uint64_t target);
 
 #ifdef __cplusplus
 }

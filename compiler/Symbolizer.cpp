@@ -33,9 +33,20 @@ void Symbolizer::symbolizeFunctionArguments(Function &F) {
   IRBuilder<> IRB(F.getEntryBlock().getFirstNonPHI());
 
   for (auto &arg : F.args()) {
-    if (!arg.user_empty())
-      symbolicExpressions[&arg] = IRB.CreateCall(runtime.getParameterExpression,
-                                                 IRB.getInt8(arg.getArgNo()));
+    if (!arg.user_empty()) {
+      
+      Type* argType = arg.getType();
+      TypeSize size = dataLayout.getTypeStoreSize(argType);
+      ConstantInt* v = ConstantInt::get(IRB.getInt8Ty(), size);
+      uint8_t argSize = (uint8_t) v->getZExtValue();
+      
+      symbolicExpressions[&arg] = IRB.CreateCall(runtime.getParameterExpressionWithTruncate,
+                                                  {
+                                                    IRB.getInt8(arg.getArgNo()),
+                                                    ConstantInt::get(IRB.getInt8Ty(), argSize)
+                                                  }
+                                                 );
+    }
   }
 }
 
@@ -361,11 +372,17 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
         || fun->getName() == "ftell"
         || fun->getName() == "fseek"
         ) {
-      errs() << "\nConcretizing args for function " << fun->getName() << ": " << *retType << "\n\n";
+      // errs() << "\nConcretizing args for function " << fun->getName() << ": " << *retType << "\n\n";
       concretizeArg = true;
     }
-  }
+  } 
 #endif
+
+  bool indirectCall = false;
+  if (I.isIndirectCall())
+  {
+    indirectCall = true;
+  }
 
   for (Use &arg : I.args()) {
     if (concretizeArg)
@@ -389,7 +406,105 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
     retValSize = (uint8_t) v->getZExtValue();
   }
 
-  if (!I.user_empty()) {
+  bool return_value_is_used = !I.user_empty();
+  Value* II = &I;
+
+  if (indirectCall) {
+    bool integer_args = true;
+    for (Use &arg : I.args()) {
+      if (!isArgInteger(arg)) {
+        integer_args = false;
+        break;
+      }
+    }
+    if (!integer_args) {
+      indirectCall = false;
+      // we do not support yet floating point indirect call
+      // hence we at least add a runtime check to see if
+      // the target is outside of instrumented code
+      Value* calledOp = I.getCalledOperand();
+      IRB.CreateCall(runtime.checkIndirectCallTarget, {
+        IRB.CreateCast(Instruction::CastOps::PtrToInt, calledOp, IRB.getInt64Ty())
+      });
+    }
+  }
+
+  bool deleteCaller = false;
+  if (indirectCall) 
+  {
+    // errs() << "\nIndirect call at " << I << "\n";
+    // errs() << "Called operand: " << *I.getCalledOperand() << "\n";
+    Value* calledOp = I.getCalledOperand();
+
+    for (Use &arg : I.args()) {
+      if (!isArgInteger(arg))
+        errs() << "arg is not integer: " << *arg << "\n";
+      assert(isArgInteger(arg));
+      IRB.CreateCall(runtime.wrapIndirectCallArgInt,
+                    {ConstantInt::get(IRB.getInt8Ty(), arg.getOperandNo()),
+                      arg->getType()->isPointerTy() 
+                        ? IRB.CreateCast(Instruction::CastOps::PtrToInt, arg, IRB.getInt64Ty())
+                        : IRB.CreateCast(Instruction::CastOps::ZExt, arg, IRB.getInt64Ty()),
+                      ConstantInt::get(IRB.getInt8Ty(), isArgInteger(arg))});
+    }
+
+    // we may remove this... we already do this for the symbolic execution
+    IRB.CreateCall(runtime.wrapIndirectCallArgCount,
+                   ConstantInt::get(IRB.getInt8Ty(), I.getNumArgOperands()));
+
+    if (return_value_is_used) {
+      IRB.CreateCall(runtime.setReturnExpression,
+                    ConstantPointerNull::get(IRB.getInt8PtrTy()));
+    }
+
+    SymFnT fty;
+    Value *NewCI;
+    if (retType->isVoidTy()) {
+      // printf("HERE 2a\n\n");
+      fty = runtime.wrapIndirectCallVoid;
+    } else if (retType->isPointerTy()) {
+      // printf("HERE 2b\n\n");
+      fty = runtime.wrapIndirectCallPtr;
+    } else {
+      // printf("HERE 2c\n\n");
+      // printf("Indirect call return size: %d\n\n", retValSize);
+      assert(isTypeInteger(retType)); // FIXME
+      switch(retValSize) {
+        case 1:
+          fty = runtime.wrapIndirectCallInt8;
+          break;
+        case 2:
+          fty = runtime.wrapIndirectCallInt16;
+          break;
+        case 4:
+          fty = runtime.wrapIndirectCallInt32;
+          break;
+        case 8:
+          fty = runtime.wrapIndirectCallInt64;
+          break;
+        default:
+          assert(0 && "unexpected return size");
+      }
+    }
+    // printf("HERE 2d\n\n");
+    NewCI = IRB.CreateCall(fty, {
+      IRB.CreateCast(Instruction::CastOps::PtrToInt, calledOp, IRB.getInt64Ty())
+    });
+    // printf("HERE 2f\n\n");
+
+    if (retType->isPointerTy()) {
+      NewCI = IRB.CreateBitCast(NewCI, retType);
+    }
+
+    if (!I.use_empty())
+      I.replaceAllUsesWith(NewCI);
+    
+    II = NewCI;
+    deleteCaller = true;
+  }
+
+  if (return_value_is_used) {
+    // printf("HERE 3a\n\n");
     // The result of the function is used somewhere later on. Since we have no
     // way of knowing whether the function is instrumented (and thus sets a
     // proper return expression), we have to account for the possibility that
@@ -398,8 +513,10 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
     // order to avoid accidentally using whatever is stored there from the
     // previous function call. (If the function is instrumented, it will just
     // override our null with the real expression.)
-    IRB.CreateCall(runtime.setReturnExpression,
-                   ConstantPointerNull::get(IRB.getInt8PtrTy()));
+    if (!indirectCall) {
+      IRB.CreateCall(runtime.setReturnExpression,
+                    ConstantPointerNull::get(IRB.getInt8PtrTy()));
+    }
     IRB.SetInsertPoint(returnPoint);
 #if 0
     if (fun && fun->getName() == "fread")
@@ -433,14 +550,19 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
         );
       }
 #endif
-      symbolicExpressions[&I] = nullptr;
+      symbolicExpressions[II] = nullptr;
     } 
     else 
     {
-      symbolicExpressions[&I] = IRB.CreateCall(runtime.getReturnExpressionWithTruncate, 
+      // printf("HERE 3b\n\n");
+      symbolicExpressions[II] = IRB.CreateCall(runtime.getReturnExpressionWithTruncate, 
         ConstantInt::get(IRB.getInt8Ty(), retValSize));
+      // printf("HERE 3c\n\n");
     }
   }
+
+  if (deleteCaller)
+    I.eraseFromParent();
 }
 
 void Symbolizer::visitBinaryOperator(BinaryOperator &I) {

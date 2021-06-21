@@ -366,6 +366,10 @@ void _sym_update_call(uintptr_t site_id) {
   // g_call_stack_manager.updateVisitCall(site_id);
 }
 
+uintptr_t _sym_get_call_site(void) {
+  return g_call_stack_manager.getCallSite();
+}
+
 void _sym_notify_ret(uintptr_t site_id) {
   g_call_stack_manager.visitRet(site_id);
 }

@@ -35,6 +35,12 @@ std::array<bool, kMaxFunctionArguments>  g_function_arguments_is_int;
 uint8_t g_function_arguments_count = 0;
 // TODO make thread-local
 
+uint8_t g_function_arguments_concrete_count = 0;
+#define MAX_CONCRETE_ARGS 256
+uint64_t g_function_concrete_arguments[MAX_CONCRETE_ARGS];
+typedef uint64_t (*check_indirect_target_t)(uint64_t, uint64_t*, uint64_t);
+check_indirect_target_t check_indirect_target;
+
 } // namespace
 
 void _sym_set_return_expression(SymExpr expr) { g_return_value = expr; }
@@ -72,6 +78,17 @@ bool _sym_is_int_parameter(uint8_t index) {
 
 SymExpr _sym_get_parameter_expression(uint8_t index) {
   return g_function_arguments[index];
+}
+
+SymExpr _sym_get_parameter_expression_with_truncate(uint8_t index, uint8_t size) {
+  SymExpr expr = g_function_arguments[index];
+  if (expr != NULL && size != 0) {
+    size_t current_bits = _sym_bits_helper(expr);
+    if (current_bits > size * 8) {
+      expr = _sym_build_trunc(expr, size * 8);
+    }
+  }
+  return expr;
 }
 
 uint8_t _sym_get_args_count(void) {
@@ -236,3 +253,84 @@ void _sym_libc_memcpy(void *dest, const void *src, size_t n) {
 void _sym_libc_memmove(void *dest, const void *src, size_t n) {
   memmove_symbolized(dest, src, n);
 } 
+
+extern uintptr_t _sym_get_call_site(void);
+uint64_t _sym_wrap_indirect_call_int(uint64_t target) {
+  printf("call target: %lx count=%lx callsite=%lx\n", target, g_function_arguments_concrete_count, _sym_get_call_site());
+  uint64_t res;
+  if (check_indirect_target == NULL) {
+    switch (g_function_arguments_concrete_count) {
+      case 0: {
+          uint64_t (*f)(void) = (uint64_t(*)(void))target;
+          res = f();
+          break;
+      }
+      case 1: {
+          uint64_t (*f)(uint64_t) = (uint64_t(*)(uint64_t))target;
+          res = f(g_function_concrete_arguments[0]);
+          break;
+      }
+      case 2: {
+          uint64_t (*f)(uint64_t, uint64_t) =
+              (uint64_t(*)(uint64_t, uint64_t))target;
+          res = f(g_function_concrete_arguments[0], g_function_concrete_arguments[1]);
+          break;
+      }
+      case 3: {
+          uint64_t (*f)(uint64_t, uint64_t, uint64_t) =
+              (uint64_t(*)(uint64_t, uint64_t, uint64_t))target;
+          res = f(g_function_concrete_arguments[0], g_function_concrete_arguments[1], g_function_concrete_arguments[2]);
+          break;
+      }
+      case 4: {
+          uint64_t (*f)(uint64_t, uint64_t, uint64_t, uint64_t) =
+              (uint64_t(*)(uint64_t, uint64_t, uint64_t, uint64_t))target;
+          res = f(g_function_concrete_arguments[0], g_function_concrete_arguments[1], g_function_concrete_arguments[2], g_function_concrete_arguments[3]);
+          break;
+      }
+      case 5: {
+          uint64_t (*f)(uint64_t, uint64_t, uint64_t, uint64_t,
+                        uint64_t) =
+              (uint64_t(*)(uint64_t, uint64_t, uint64_t, uint64_t,
+                            uint64_t))target;
+          res = f(g_function_concrete_arguments[0], g_function_concrete_arguments[1], g_function_concrete_arguments[2], g_function_concrete_arguments[3], g_function_concrete_arguments[4]);
+          break;
+      }
+      case 6: {
+          uint64_t (*f)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+                        uint64_t) =
+              (uint64_t(*)(uint64_t, uint64_t, uint64_t, uint64_t,
+                            uint64_t, uint64_t))target;
+          res = f(g_function_concrete_arguments[0], g_function_concrete_arguments[1], g_function_concrete_arguments[2], g_function_concrete_arguments[3], g_function_concrete_arguments[4], g_function_concrete_arguments[5]);
+          break;
+      }
+      default:
+          assert(0 && "Indirect call with more than 6 arguments.");
+    }
+    printf("res=%lx\n", res);
+    return res;
+  } else {
+    return check_indirect_target(target, g_function_concrete_arguments, g_function_arguments_concrete_count);
+  }
+}
+
+void _sym_indirect_call_set_arg_int(uint8_t index, uint64_t value, int8_t size) {
+  g_function_concrete_arguments[index] = value;
+}
+
+uint64_t _sym_indirect_call_get_arg_int(uint8_t index) {
+  return g_function_concrete_arguments[index];
+}
+
+void _sym_indirect_call_set_arg_count(uint8_t count) {
+  g_function_arguments_concrete_count = count;
+}
+
+void _sym_wrap_indirect_call_set_trumpoline(uint64_t target) {
+  check_indirect_target = (check_indirect_target_t) target;
+}
+
+void _sym_check_indirect_call_target(uint64_t target) {
+  if (check_indirect_target != NULL)
+    check_indirect_target(target, NULL, 0);
+}

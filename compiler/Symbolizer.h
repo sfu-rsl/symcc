@@ -207,6 +207,13 @@ private:
     return is_int;
   }
 
+   bool isTypeInteger(llvm::Type *type) {
+    bool is_int = type->isIntegerTy() || type->isPointerTy(); 
+    if (!is_int)
+      llvm::errs() << "Type: " << *type << " is_int=" << is_int << "\n";
+    return is_int;
+  }
+
   llvm::Value *getSymbolicExpressionOrNull(llvm::Value *V) {
     auto *expr = getSymbolicExpression(V);
     if (expr == nullptr)

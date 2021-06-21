@@ -79,6 +79,8 @@ Runtime::Runtime(Module &M) {
       import(M, "_sym_set_int_parameter_expression", voidT, int8T, ptrT, int8T);
   getParameterExpression =
       import(M, "_sym_get_parameter_expression", ptrT, int8T);
+  getParameterExpressionWithTruncate =
+      import(M, "_sym_get_parameter_expression_with_truncate", ptrT, int8T, int8T);
   isIntParameter =
       import(M, "_sym_is_int_parameter", int8T);
   setParameterCount =
@@ -167,6 +169,16 @@ Runtime::Runtime(Module &M) {
   LibcMemset = import(M, "_sym_libc_memset", voidT, ptrT, int8T, IRB.getInt64Ty());
   LibcMemcpy = import(M, "_sym_libc_memcpy", voidT, ptrT, ptrT, IRB.getInt64Ty());
   LibcMemmove = import(M, "_sym_libc_memmove", voidT, ptrT, ptrT, IRB.getInt64Ty());
+
+  wrapIndirectCallInt8 = import(M, "_sym_wrap_indirect_call_int", IRB.getInt8Ty(), IRB.getInt64Ty());
+  wrapIndirectCallInt16 = import(M, "_sym_wrap_indirect_call_int", IRB.getInt16Ty(), IRB.getInt64Ty());
+  wrapIndirectCallInt32 = import(M, "_sym_wrap_indirect_call_int", IRB.getInt32Ty(), IRB.getInt64Ty());
+  wrapIndirectCallInt64 = import(M, "_sym_wrap_indirect_call_int", IRB.getInt64Ty(), IRB.getInt64Ty());
+  wrapIndirectCallPtr = import(M, "_sym_wrap_indirect_call_int", ptrT, IRB.getInt64Ty());
+  wrapIndirectCallVoid = import(M, "_sym_wrap_indirect_call_int", voidT, IRB.getInt64Ty());
+  wrapIndirectCallArgInt = import(M, "_sym_indirect_call_set_arg_int", voidT, int8T, IRB.getInt64Ty(), int8T);
+  wrapIndirectCallArgCount = import(M, "_sym_indirect_call_set_arg_count", voidT, int8T);
+  checkIndirectCallTarget = import(M, "_sym_check_indirect_call_target", voidT, IRB.getInt64Ty());
 }
 
 /// Decide whether a function is called symbolically.

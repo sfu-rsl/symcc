@@ -52,6 +52,7 @@ struct Runtime {
   SymFnT buildBoolToBits{};
   SymFnT pushPathConstraint{};
   SymFnT getParameterExpression{};
+  SymFnT getParameterExpressionWithTruncate{};
   SymFnT setParameterExpression{};
   SymFnT setParameterCount{};
   SymFnT setIntParameterExpression{};
@@ -71,6 +72,16 @@ struct Runtime {
 
   SymFnT debugFunctionAfterReturn{};
   SymFnT printPathConstraints{};
+
+  SymFnT wrapIndirectCallArgCount{};
+  SymFnT wrapIndirectCallArgInt{};
+  SymFnT wrapIndirectCallInt8{};
+  SymFnT wrapIndirectCallInt16{};
+  SymFnT wrapIndirectCallInt32{};
+  SymFnT wrapIndirectCallInt64{};
+  SymFnT wrapIndirectCallPtr{};
+  SymFnT wrapIndirectCallVoid{};
+  SymFnT checkIndirectCallTarget{};
 
   SymFnT LibcMemset{};
   SymFnT LibcMemcpy{};
