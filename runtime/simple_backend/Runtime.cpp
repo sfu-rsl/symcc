@@ -547,3 +547,7 @@ void _sym_collect_garbage() {
             << " milliseconds)" << std::endl;
 #endif
 }
+
+uintptr_t _sym_get_call_site(void) {
+  return 0;
+}

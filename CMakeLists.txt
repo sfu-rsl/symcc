@@ -33,10 +33,29 @@ set(SYM_RUNTIME_BUILD_ARGS
   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
   -DZ3_TRUST_SYSTEM_VERSION=${Z3_TRUST_SYSTEM_VERSION})
 
+set(SYM_FAKE_RUNTIME_BUILD_ARGS
+  -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+  -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
+  -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+  -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
+  -DCMAKE_SHARED_LINKER_FLAGS=${CMAKE_SHARED_LINKER_FLAGS}
+  -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+  -DZ3_TRUST_SYSTEM_VERSION=${Z3_TRUST_SYSTEM_VERSION})
+
 ExternalProject_Add(SymRuntime
   SOURCE_DIR ${CMAKE_SOURCE_DIR}/runtime
   CMAKE_ARGS
   ${SYM_RUNTIME_BUILD_ARGS}
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=${CMAKE_EXPORT_COMPILE_COMMANDS}
+  -DZ3_DIR=${Z3_DIR}
+  -DLLVM_DIR=${LLVM_DIR}
+  INSTALL_COMMAND ""
+  BUILD_ALWAYS TRUE)
+
+ExternalProject_Add(SymFakeRuntime
+  SOURCE_DIR ${CMAKE_SOURCE_DIR}/fake_runtime
+  CMAKE_ARGS
+  ${SYM_FAKE_RUNTIME_BUILD_ARGS}
   -DCMAKE_EXPORT_COMPILE_COMMANDS=${CMAKE_EXPORT_COMPILE_COMMANDS}
   -DZ3_DIR=${Z3_DIR}
   -DLLVM_DIR=${LLVM_DIR}
@@ -78,7 +97,7 @@ include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 \
 -Wredundant-decls -Wcast-align -Wmissing-include-dirs -Wswitch-default \
 -Wextra -Wall -Winvalid-pch -Wredundant-decls -Wformat=2 \
--Wmissing-format-attribute -Wformat-nonliteral -Werror")
+-Wmissing-format-attribute -Wformat-nonliteral") # -Werror
 
 # Mark nodelete to work around unload bug in upstream LLVM 5.0+
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,nodelete")

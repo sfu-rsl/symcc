@@ -256,7 +256,7 @@ void _sym_libc_memmove(void *dest, const void *src, size_t n) {
 
 extern uintptr_t _sym_get_call_site(void);
 uint64_t _sym_wrap_indirect_call_int(uint64_t target) {
-  printf("call target: %lx count=%lx callsite=%lx\n", target, g_function_arguments_concrete_count, _sym_get_call_site());
+  printf("call target: %lx count=%d callsite=%lx\n", target, g_function_arguments_concrete_count, _sym_get_call_site());
   uint64_t res;
   if (check_indirect_target == NULL) {
     switch (g_function_arguments_concrete_count) {
@@ -314,7 +314,7 @@ uint64_t _sym_wrap_indirect_call_int(uint64_t target) {
   }
 }
 
-void _sym_indirect_call_set_arg_int(uint8_t index, uint64_t value, int8_t size) {
+void _sym_indirect_call_set_arg_int(uint8_t index, uint64_t value, __attribute__((unused)) int8_t size) {
   g_function_concrete_arguments[index] = value;
 }
 

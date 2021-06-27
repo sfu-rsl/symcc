@@ -410,16 +410,33 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
   Value* II = &I;
 
   if (indirectCall) {
-    bool integer_args = true;
+    bool supported = true;
     for (Use &arg : I.args()) {
       if (!isArgInteger(arg)) {
-        integer_args = false;
+        supported = false;
         break;
       }
     }
-    if (!integer_args) {
+
+    if (!(
+        retType->isVoidTy()
+        || retType->isPointerTy()
+        || isTypeInteger(retType)
+        )) {
+      // e.g., it is returning a struct
+      supported = false;
+    }
+
+    // we do not handle yet invoke since
+    // we cannot replace them with a simple call
+    // which is not a valid BB terminator
+    InvokeInst* invokeInst = dyn_cast<InvokeInst>(&I);
+    if (invokeInst)
+      supported = false;
+
+    if (!supported) {
       indirectCall = false;
-      // we do not support yet floating point indirect call
+      // we do not support yet floating point or structs
       // hence we at least add a runtime check to see if
       // the target is outside of instrumented code
       Value* calledOp = I.getCalledOperand();
@@ -468,24 +485,34 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
     } else {
       // printf("HERE 2c\n\n");
       // printf("Indirect call return size: %d\n\n", retValSize);
+      // errs() << "return type is: " << *retType << "\n";
+
+      int returnTypeBitWidth = retValSize * 8;
+      if (IntegerType *IT = dyn_cast<IntegerType>(retType))
+        returnTypeBitWidth = IT->getBitWidth();
+
       assert(isTypeInteger(retType)); // FIXME
-      switch(retValSize) {
+      switch(returnTypeBitWidth) {
         case 1:
-          fty = runtime.wrapIndirectCallInt8;
-          break;
-        case 2:
-          fty = runtime.wrapIndirectCallInt16;
-          break;
-        case 4:
-          fty = runtime.wrapIndirectCallInt32;
+          fty = runtime.wrapIndirectCallInt1;
           break;
         case 8:
+          fty = runtime.wrapIndirectCallInt8;
+          break;
+        case 16:
+          fty = runtime.wrapIndirectCallInt16;
+          break;
+        case 32:
+          fty = runtime.wrapIndirectCallInt32;
+          break;
+        case 64:
           fty = runtime.wrapIndirectCallInt64;
           break;
         default:
           assert(0 && "unexpected return size");
       }
     }
+
     // printf("HERE 2d\n\n");
     NewCI = IRB.CreateCall(fty, {
       IRB.CreateCast(Instruction::CastOps::PtrToInt, calledOp, IRB.getInt64Ty())

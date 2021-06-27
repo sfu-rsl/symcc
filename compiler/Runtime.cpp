@@ -170,6 +170,7 @@ Runtime::Runtime(Module &M) {
   LibcMemcpy = import(M, "_sym_libc_memcpy", voidT, ptrT, ptrT, IRB.getInt64Ty());
   LibcMemmove = import(M, "_sym_libc_memmove", voidT, ptrT, ptrT, IRB.getInt64Ty());
 
+  wrapIndirectCallInt1 = import(M, "_sym_wrap_indirect_call_int", IRB.getInt1Ty(), IRB.getInt64Ty());
   wrapIndirectCallInt8 = import(M, "_sym_wrap_indirect_call_int", IRB.getInt8Ty(), IRB.getInt64Ty());
   wrapIndirectCallInt16 = import(M, "_sym_wrap_indirect_call_int", IRB.getInt16Ty(), IRB.getInt64Ty());
   wrapIndirectCallInt32 = import(M, "_sym_wrap_indirect_call_int", IRB.getInt32Ty(), IRB.getInt64Ty());

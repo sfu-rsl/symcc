@@ -283,13 +283,15 @@ SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits) {
       g_expr_builder->createTrunc(allocatedExpressions.at(expr), bits));
 }
 
+// static int counter = 0;
 void _sym_push_path_constraint(SymExpr constraint, int taken,
                                uintptr_t site_id) {
   if (constraint == nullptr)
     return;
-#if 0
-  const char *s_expr = _sym_expr_to_string(constraint);
+#if 1
+  const char *s_expr = ""; //_sym_expr_to_string(constraint);
   printf("QUERY AT %lx: %s\n", site_id, s_expr);
+  // assert(counter++ < 1);
 #endif  
   g_solver->addJcc(allocatedExpressions.at(constraint), taken != 0, site_id);
 }

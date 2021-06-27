@@ -75,6 +75,7 @@ struct Runtime {
 
   SymFnT wrapIndirectCallArgCount{};
   SymFnT wrapIndirectCallArgInt{};
+  SymFnT wrapIndirectCallInt1{};
   SymFnT wrapIndirectCallInt8{};
   SymFnT wrapIndirectCallInt16{};
   SymFnT wrapIndirectCallInt32{};
