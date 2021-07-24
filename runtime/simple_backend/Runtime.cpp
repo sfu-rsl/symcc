@@ -551,3 +551,9 @@ void _sym_collect_garbage() {
 uintptr_t _sym_get_call_site(void) {
   return 0;
 }
+
+void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr) {}
+
+SymExpr _sym_build_bool_to_sign_bits(SymExpr expr, uint8_t bits) { 
+  return _sym_build_bool_to_bits(expr, bits); // FIXME: see QSYM runtime 
+}

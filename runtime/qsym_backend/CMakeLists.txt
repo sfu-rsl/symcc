@@ -14,6 +14,7 @@
 
 # Build the parts of the Qsym backend that are relevant for us
 
+set(XXHASH_SOURCE_DIR "qsym/qsym/pintool")
 set(QSYM_SOURCE_DIR "qsym/qsym/pintool")
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/expr__gen.cpp

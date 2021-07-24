@@ -23,6 +23,8 @@
 
 #include "Runtime.h"
 
+#include "../../symqemu-hybrid/accel/tcg/hybrid/hybrid_debug.h"
+
 using namespace llvm;
 
 void Symbolizer::symbolizeFunctionArguments(Function &F) {
@@ -320,6 +322,12 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     IRBuilder<> IRB(&I);
     auto swapped = buildRuntimeCall(IRB, runtime.buildBswap, I.getOperand(0));
     registerSymbolicComputation(swapped, &I);
+    break;
+  }
+  case Intrinsic::vastart: {
+    IRBuilder<> IRB(&I);
+    IRB.SetInsertPoint(I.getNextNode());
+    IRB.CreateCall(runtime.vaListStart, I.getOperand(0));
     break;
   }
   default:
@@ -622,6 +630,31 @@ void Symbolizer::visitBinaryOperator(BinaryOperator &I) {
   auto runtimeCall =
       buildRuntimeCall(IRB, handler, {I.getOperand(0), I.getOperand(1)});
   registerSymbolicComputation(runtimeCall, &I);
+
+#if HYBRID_DBG_CONSISTENCY_CHECK
+  if (runtimeCall.has_value()) {
+    Type* valueType = I.getType();
+
+    bool too_large = false;
+    if (IntegerType *IT = dyn_cast<IntegerType>(valueType))
+      too_large = IT->getBitWidth() > 64;
+
+    if (!too_large && (valueType->isIntegerTy() || valueType->isPointerTy())) {
+      IRB.SetInsertPoint(I.getNextNode());
+      Value* v = getSymbolicExpressionOrNull(&I);
+      IRB.CreateCall(
+        runtime.checkConsistency,
+        {
+          v,
+          valueType->isPointerTy() 
+            ? IRB.CreateCast(Instruction::CastOps::PtrToInt, &I, IRB.getInt64Ty())
+            : IRB.CreateCast(Instruction::CastOps::ZExt, &I, IRB.getInt64Ty()),
+          ConstantInt::get(IRB.getInt64Ty(), 0)
+        }
+      );
+    }
+  }
+#endif
 }
 
 void Symbolizer::visitSelectInst(SelectInst &I) {
@@ -747,6 +780,30 @@ void Symbolizer::visitStoreInst(StoreInst &I) {
        ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
        data,
        ConstantInt::get(IRB.getInt8Ty(), dataLayout.isLittleEndian() ? 1 : 0)});
+  
+#if HYBRID_DBG_CONSISTENCY_CHECK
+  if (data) {
+
+    bool too_large = false;
+    if (IntegerType *IT = dyn_cast<IntegerType>(dataType))
+      too_large = IT->getBitWidth() > 64;
+
+    if (!too_large && (dataType->isIntegerTy() || dataType->isPointerTy())) {
+
+      // IRB.SetInsertPoint(I.getNextNode());
+      IRB.CreateCall(
+        runtime.checkConsistency,
+        {
+          data,
+          dataType->isPointerTy() 
+            ? IRB.CreateCast(Instruction::CastOps::PtrToInt, I.getValueOperand(), IRB.getInt64Ty())
+            : IRB.CreateCast(Instruction::CastOps::ZExt, I.getValueOperand(), IRB.getInt64Ty()),
+          IRB.CreatePtrToInt(I.getPointerOperand(), intPtrType)
+        }
+      );
+    }
+  }
+#endif
 }
 
 void Symbolizer::visitGetElementPtrInst(GetElementPtrInst &I) {
@@ -956,12 +1013,28 @@ void Symbolizer::visitCastInst(CastInst &I) {
   // raises an error. The run-time library provides a dedicated conversion
   // function for this case.
   if (I.getSrcTy()->getIntegerBitWidth() == 1) {
+
+    SymFnT target;
+
+    switch (I.getOpcode()) {
+    case Instruction::SExt:
+      target = runtime.buildBoolToSignBits;
+      break;
+    case Instruction::ZExt:
+      target = runtime.buildBoolToBits;
+      break;
+    default:
+      llvm_unreachable("Unknown cast opcode");
+    }
+
     auto boolToBitConversion = buildRuntimeCall(
-        IRB, runtime.buildBoolToBits,
+        IRB, target,
         {{I.getOperand(0), true},
          {IRB.getInt8(I.getDestTy()->getIntegerBitWidth()), false}});
     registerSymbolicComputation(boolToBitConversion, &I);
+  
   } else {
+
     SymFnT target;
 
     switch (I.getOpcode()) {
@@ -982,6 +1055,31 @@ void Symbolizer::visitCastInst(CastInst &I) {
                                        I.getSrcTy()->getIntegerBitWidth()),
                            false}});
     registerSymbolicComputation(symbolicCast, &I);
+
+#if HYBRID_DBG_CONSISTENCY_CHECK
+  if (symbolicCast.has_value()) {
+    Type* valueType = I.getType();
+
+    bool too_large = false;
+    if (IntegerType *IT = dyn_cast<IntegerType>(valueType))
+      too_large = IT->getBitWidth() > 64;
+
+    if (!too_large && (valueType->isIntegerTy() || valueType->isPointerTy())) {
+      IRB.SetInsertPoint(I.getNextNode());
+      Value* v = getSymbolicExpressionOrNull(&I);
+      IRB.CreateCall(
+        runtime.checkConsistency,
+        {
+          v,
+          valueType->isPointerTy() 
+            ? IRB.CreateCast(Instruction::CastOps::PtrToInt, &I, IRB.getInt64Ty())
+            : IRB.CreateCast(Instruction::CastOps::ZExt, &I, IRB.getInt64Ty()),
+          ConstantInt::get(IRB.getInt64Ty(), 0)
+        }
+      );
+    }
+  }
+#endif
   }
 }
 

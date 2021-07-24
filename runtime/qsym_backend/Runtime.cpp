@@ -63,6 +63,10 @@
 #include <LibcWrappers.h>
 #include <Shadow.h>
 
+#include <third_party/xxhash/xxhash.h>
+
+#include "../../../symqemu-hybrid/accel/tcg/hybrid/hybrid_debug.h"
+
 namespace qsym {
 
 ExprBuilder *g_expr_builder;
@@ -226,6 +230,16 @@ SymExpr _sym_build_bool(bool value) {
         allocatedExpressions.at(a), allocatedExpressions.at(b)));              \
   }
 
+#define DEF_BINARY_EXPR_BUILDER_SHIFT(name, qsymName)                          \
+  SymExpr _sym_build_##name(SymExpr a, SymExpr b) {                            \
+    size_t s = _sym_bits_helper(a);                                            \
+    SymExpr mask = _sym_build_integer(s - 1, s);                               \
+    b = registerExpression(g_expr_builder->createAnd(                          \
+          allocatedExpressions.at(b), allocatedExpressions.at(mask)));         \
+    return registerExpression(g_expr_builder->create##qsymName(                \
+        allocatedExpressions.at(a), allocatedExpressions.at(b)));              \
+  }
+
 DEF_BINARY_EXPR_BUILDER(add, Add)
 DEF_BINARY_EXPR_BUILDER(sub, Sub)
 DEF_BINARY_EXPR_BUILDER(mul, Mul)
@@ -234,9 +248,9 @@ DEF_BINARY_EXPR_BUILDER(signed_div, SDiv)
 DEF_BINARY_EXPR_BUILDER(unsigned_rem, URem)
 DEF_BINARY_EXPR_BUILDER(signed_rem, SRem)
 
-DEF_BINARY_EXPR_BUILDER(shift_left, Shl)
-DEF_BINARY_EXPR_BUILDER(logical_shift_right, LShr)
-DEF_BINARY_EXPR_BUILDER(arithmetic_shift_right, AShr)
+DEF_BINARY_EXPR_BUILDER_SHIFT(shift_left, Shl)
+DEF_BINARY_EXPR_BUILDER_SHIFT(logical_shift_right, LShr)
+DEF_BINARY_EXPR_BUILDER_SHIFT(arithmetic_shift_right, AShr)
 
 DEF_BINARY_EXPR_BUILDER(signed_less_than, Slt)
 DEF_BINARY_EXPR_BUILDER(signed_less_equal, Sle)
@@ -283,17 +297,77 @@ SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits) {
       g_expr_builder->createTrunc(allocatedExpressions.at(expr), bits));
 }
 
+#if HYBRID_DBG_DUMP_QUERY
+static int debug_mode = 0;
+extern "C" {
+int debug_count = 0;
+unsigned int debug_hash = 0;
+}
+XXH32_state_t debug_state;
+static unsigned int expected_hash;
+static int expected_count;
+static int expected_taken;
+#endif
+
 // static int counter = 0;
 void _sym_push_path_constraint(SymExpr constraint, int taken,
                                uintptr_t site_id) {
   if (constraint == nullptr)
     return;
-#if 1
+
+#if HYBRID_DBG_DUMP_QUERY
+  if (debug_count == 0) {
+    XXH32_reset(&debug_state, 0);
+    char* e = getenv("SYM_DEBUG");
+    if (e != NULL)
+      debug_mode = 1;
+    if (debug_mode) {
+      e = getenv("SYM_DEBUG_HASH");
+      assert(e);
+      expected_hash = (int)strtoul(e, NULL, 16);
+      e = getenv("SYM_DEBUG_COUNT");
+      assert(e);
+      expected_count = (int)strtoul(e, NULL, 10);
+      e = getenv("SYM_DEBUG_TAKEN");
+      assert(e);
+      expected_taken = (int)strtoul(e, NULL, 10);
+    }
+  }
+  XXH32_update(&debug_state, &site_id, sizeof(site_id));
+  debug_count += 1;
+
   const char *s_expr = ""; //_sym_expr_to_string(constraint);
-  printf("QUERY AT %lx: %s\n", site_id, s_expr);
-  // assert(counter++ < 1);
-#endif  
+  printf("QUERY AT addr=%lx hash=%x counter=%d taken=%d: %s\n", site_id, debug_hash, debug_count, taken, s_expr);
+
+  debug_hash = XXH32_digest(&debug_state);
+  if (debug_mode) {
+    if (debug_count == expected_count) {
+      if (debug_hash == expected_hash) {
+        if (taken == expected_taken) {
+          printf("OK\n");
+          exit(0);
+        } else {
+          printf("Divergence: different taken\n");
+          exit(1);
+        }
+      } else {
+        printf("Divergence: different path\n");
+        exit(1);
+      }
+      exit(0);
+    } 
+    assert(debug_count < expected_count);
+  }
+
+  if (!debug_mode)
+#elif HYBRID_DBG_PRINT
+  printf("QUERY AT addr=%lx taken=%d\n", site_id, taken);
+#endif
   g_solver->addJcc(allocatedExpressions.at(constraint), taken != 0, site_id);
+
+#if HYBRID_DBG_CONSISTENCY_CHECK
+  _sym_check_consistency(constraint, taken, site_id);
+#endif
 }
 
 SymExpr _sym_get_input_byte(size_t offset) {
@@ -315,6 +389,14 @@ size_t _sym_bits_helper(SymExpr expr) { return expr->bits(); }
 SymExpr _sym_build_bool_to_bits(SymExpr expr, uint8_t bits) {
   return registerExpression(
       g_expr_builder->boolToBit(allocatedExpressions.at(expr), bits));
+}
+
+SymExpr _sym_build_bool_to_sign_bits(SymExpr expr, uint8_t bits) {
+  if (expr == NULL) return NULL;
+  expr = registerExpression(
+      g_expr_builder->boolToBit(allocatedExpressions.at(expr), 1));
+  return registerExpression(g_expr_builder->createSExt(
+      allocatedExpressions.at(expr), bits));
 }
 
 //
@@ -360,6 +442,12 @@ UNSUPPORTED(SymExpr _sym_build_float_to_unsigned_integer(SymExpr, uint8_t))
 //
 
 void _sym_notify_call(uintptr_t site_id) {
+#if 0
+  uint64_t* a = (uint64_t*)0x40007fee40;
+  if (*a == 0x40007fee50)
+    printf("VALUE %lx AT %lx %lx\n", 0x40007fee50, 0x40007fee40, site_id);
+  assert(*a != 0x40007fee50);
+#endif
   g_call_stack_manager.visitCall(site_id);
 }
 
@@ -373,10 +461,28 @@ uintptr_t _sym_get_call_site(void) {
 }
 
 void _sym_notify_ret(uintptr_t site_id) {
+#if 0
+  uint64_t* a = (uint64_t*)0x40007fee40;
+  if (*a == 0x40007fee50)
+    printf("VALUE %lx AT %lx\n", 0x40007fee50, 0x40007fee40);
+  assert(*a != 0x40007fee50);
+#endif
   g_call_stack_manager.visitRet(site_id);
 }
 
+static uintptr_t last_site_id = 0;
 void _sym_notify_basic_block(uintptr_t site_id) {
+#if 0
+  uint64_t v = 0x55555561ab90;
+  uint64_t* a = (uint64_t*)0x40007ffaf8;
+  if (*a == v)
+    printf("VALUE %lx AT %p %lx %lx\n", v, a, last_site_id, site_id);
+  // assert(*a != 0x40007fee50);
+#endif
+  last_site_id = site_id;
+#if HYBRID_DBG_PRINT_PC
+  printf("BB: %lx\n", site_id);
+#endif
   g_call_stack_manager.visitBasicBlock(site_id);
 }
 
@@ -443,3 +549,22 @@ void _sym_collect_garbage() {
             << " milliseconds)" << std::endl;
 #endif
 }
+
+#if HYBRID_DBG_CONSISTENCY_CHECK
+void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr) {  
+#if 0
+  uint64_t* a = (uint64_t*)0x40007fead0;
+  if (*a == 0x40007feae0)
+    printf("VALUE %lx AT %lx\n", 0x40007feae0, 0x40007fead0);
+  // assert(*a != 0x40007feae0);
+#endif
+  if (expr == NULL) return;
+  int res = g_solver->checkConsistency(allocatedExpressions.at(expr), expected_value);
+  if (res == 0) {
+    printf("CONSISTENCY CHECK FAILED AT %lx\n", addr);
+    assert(0);
+  }
+}
+#else
+void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr) {}
+#endif

@@ -200,6 +200,10 @@ uint64_t _sym_indirect_call_get_arg_int(uint8_t index);
 void _sym_wrap_indirect_call_set_trumpoline(uint64_t target);
 void _sym_check_indirect_call_target(uint64_t target);
 
+void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr);
+void _sym_va_list_start(uint8_t* ap);
+SymExpr _sym_build_bool_to_sign_bits(SymExpr expr, uint8_t bits);
+
 #ifdef __cplusplus
 }
 #endif

@@ -50,6 +50,7 @@ struct Runtime {
   SymFnT buildBoolOr{};
   SymFnT buildBoolXor{};
   SymFnT buildBoolToBits{};
+  SymFnT buildBoolToSignBits{};
   SymFnT pushPathConstraint{};
   SymFnT getParameterExpression{};
   SymFnT getParameterExpressionWithTruncate{};
@@ -87,6 +88,9 @@ struct Runtime {
   SymFnT LibcMemset{};
   SymFnT LibcMemcpy{};
   SymFnT LibcMemmove{};
+
+  SymFnT checkConsistency{};
+  SymFnT vaListStart{};
 
   /// Mapping from icmp predicates to the functions that build the corresponding
   /// symbolic expressions.

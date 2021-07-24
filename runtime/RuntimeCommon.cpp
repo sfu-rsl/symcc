@@ -24,6 +24,8 @@
 
 #include "LibcWrappers.h"
 
+#include "../../symqemu-hybrid/accel/tcg/hybrid/hybrid_debug.h"
+
 namespace {
 
 constexpr int kMaxFunctionArguments = 256;
@@ -40,6 +42,8 @@ uint8_t g_function_arguments_concrete_count = 0;
 uint64_t g_function_concrete_arguments[MAX_CONCRETE_ARGS];
 typedef uint64_t (*check_indirect_target_t)(uint64_t, uint64_t*, uint64_t);
 check_indirect_target_t check_indirect_target;
+
+uint8_t concrete_mode = 0;
 
 } // namespace
 
@@ -130,12 +134,20 @@ void _sym_memmove(uint8_t *dest, const uint8_t *src, size_t length) {
 
 SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
   assert(length && "Invalid query for zero-length memory region");
-
+#if 0
+  uint64_t* a = (uint64_t*)0x40007fee40;
+  if (*a == 0x40007fee50)
+    printf("VALUE %lx AT %lx\n", 0x40007fee50, 0x40007fee40);
+  assert(*a != 0x40007fee50);
+#endif
 #ifdef DEBUG_RUNTIME
   std::cerr << "Reading " << length << " bytes from address " << P(addr)
             << std::endl;
   dump_known_regions();
 #endif
+
+  if (_sym_is_concrete_mode_enabled())
+    return nullptr;
 
   // If the entire memory region is concrete, don't create a symbolic expression
   // at all.
@@ -157,13 +169,45 @@ SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
   const char *s_expr = _sym_expr_to_string(res);
   printf("MEMORY READ at %p: %s\n", addr, s_expr);
 #endif
+
+#if HYBRID_DBG_CONSISTENCY_CHECK
+  if (length <= 8) {
+    uint64_t expected_value;
+    switch(length) {
+      case 1:
+        expected_value = *((uint8_t*)addr);
+        break;
+      case 2:
+        expected_value = *((uint16_t*)addr);
+        break;
+      case 4:
+        expected_value = *((uint32_t*)addr);
+        break;
+      case 8:
+        expected_value = *((uint64_t*)addr);
+        break;
+      default:
+        printf("READ SIZE: %ld\n", length);
+        assert(0 && "Unexpected read size");
+    }
+    _sym_check_consistency(res, expected_value, (uint64_t) addr);
+  }
+#endif
+
   return res;
 }
 
 void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,
                        bool little_endian) {
   assert(length && "Invalid query for zero-length memory region");
-
+#if 0
+  uint64_t* a = (uint64_t*)0x40007fead0;
+  if (*a == 0x40007feae0)
+    printf("VALUE %lx AT %lx\n", 0x40007feae0, 0x40007fead0);
+  assert(*a != 0x40007feae0);
+  if ((uint8_t *)0x40007fead0 >= addr && (uint8_t *)0x40007fead0 < addr + length)
+    printf("WRITING AT %lx\n", 0x40007fead0);
+#endif
 #ifdef DEBUG_RUNTIME
   std::cerr << "Writing " << length << " bytes to address " << P(addr)
             << std::endl;
@@ -256,7 +300,9 @@ void _sym_libc_memmove(void *dest, const void *src, size_t n) {
 
 extern uintptr_t _sym_get_call_site(void);
 uint64_t _sym_wrap_indirect_call_int(uint64_t target) {
+#ifdef HYBRID_DBG_PRINT
   printf("call target: %lx count=%d callsite=%lx\n", target, g_function_arguments_concrete_count, _sym_get_call_site());
+#endif
   uint64_t res;
   if (check_indirect_target == NULL) {
     switch (g_function_arguments_concrete_count) {
@@ -304,10 +350,56 @@ uint64_t _sym_wrap_indirect_call_int(uint64_t target) {
           res = f(g_function_concrete_arguments[0], g_function_concrete_arguments[1], g_function_concrete_arguments[2], g_function_concrete_arguments[3], g_function_concrete_arguments[4], g_function_concrete_arguments[5]);
           break;
       }
+      case 7: {
+          uint64_t (*f)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+                        uint64_t, uint64_t) =
+              (uint64_t(*)(uint64_t, uint64_t, uint64_t, uint64_t,
+                            uint64_t, uint64_t, uint64_t))target;
+          res = f(g_function_concrete_arguments[0], g_function_concrete_arguments[1], 
+            g_function_concrete_arguments[2], g_function_concrete_arguments[3], 
+            g_function_concrete_arguments[4], g_function_concrete_arguments[5],
+            g_function_concrete_arguments[6]);
+          break;
+      }
+      case 8: {
+          uint64_t (*f)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+                        uint64_t, uint64_t, uint64_t) =
+              (uint64_t(*)(uint64_t, uint64_t, uint64_t, uint64_t,
+                            uint64_t, uint64_t, uint64_t, uint64_t))target;
+          res = f(g_function_concrete_arguments[0], g_function_concrete_arguments[1], 
+            g_function_concrete_arguments[2], g_function_concrete_arguments[3], 
+            g_function_concrete_arguments[4], g_function_concrete_arguments[5],
+            g_function_concrete_arguments[6], g_function_concrete_arguments[7]);
+          break;
+      }
+      case 9: {
+          uint64_t (*f)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+                        uint64_t, uint64_t, uint64_t, uint64_t) =
+              (uint64_t(*)(uint64_t, uint64_t, uint64_t, uint64_t,
+                            uint64_t, uint64_t, uint64_t, uint64_t, uint64_t))target;
+          res = f(g_function_concrete_arguments[0], g_function_concrete_arguments[1], 
+            g_function_concrete_arguments[2], g_function_concrete_arguments[3], 
+            g_function_concrete_arguments[4], g_function_concrete_arguments[5],
+            g_function_concrete_arguments[6], g_function_concrete_arguments[7], 
+            g_function_concrete_arguments[8]);
+          break;
+      }
+      case 10: {
+          uint64_t (*f)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+                        uint64_t, uint64_t, uint64_t, uint64_t, uint64_t) =
+              (uint64_t(*)(uint64_t, uint64_t, uint64_t, uint64_t,
+                            uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t))target;
+          res = f(g_function_concrete_arguments[0], g_function_concrete_arguments[1], 
+            g_function_concrete_arguments[2], g_function_concrete_arguments[3], 
+            g_function_concrete_arguments[4], g_function_concrete_arguments[5],
+            g_function_concrete_arguments[6], g_function_concrete_arguments[7], 
+            g_function_concrete_arguments[8], g_function_concrete_arguments[9]);
+          break;
+      }
       default:
-          assert(0 && "Indirect call with more than 6 arguments.");
+          assert(0 && "Indirect call with more than 10 arguments.");
     }
-    printf("res=%lx\n", res);
+    // printf("indirect call addr=%lx res=%lx\n", target, res);
     return res;
   } else {
     return check_indirect_target(target, g_function_concrete_arguments, g_function_arguments_concrete_count);
@@ -333,4 +425,79 @@ void _sym_wrap_indirect_call_set_trumpoline(uint64_t target) {
 void _sym_check_indirect_call_target(uint64_t target) {
   if (check_indirect_target != NULL)
     check_indirect_target(target, NULL, 0);
+}
+
+int _sym_is_concrete_mode_enabled(void) {
+  return concrete_mode; 
+}
+
+int _sym_set_concrete_mode(int v) {
+  concrete_mode = v; 
+  return v;
+}
+
+void _sym_va_list_start(uint64_t* ap) {
+  // printf("VA LIST PTR: %p\n", ap);
+#if 0
+  for (int i = 0; i < 128; i++)
+    printf("VA LIST[%d] at %p = %lx\n", -i, &ap[-i], ap[-i]);
+  printf("\n");
+  for (int i = 0; i < 128; i++)
+    printf("VA LIST[%d] at %p = %lx\n", i, &ap[i], ap[i]);
+#endif
+  int offset_start = ((uint32_t*)ap)[0] / sizeof(void *);
+  int count = _sym_get_args_count();
+  // printf("ARGS COUNT: %d\n", count);
+  // printf("START OFFSET: %d\n", offset_start);
+  uint64_t* args = (uint64_t*)ap[2];
+  // printf("ARGS ADDR: %p\n", args);
+  int int_index = 0;
+  int i = 0;
+  for (; int_index < 6 && i < count; i++) {
+    int is_int = _sym_is_int_parameter(i);
+    // printf("ARG[%d] is int: %d\n", i, is_int);
+    if (!is_int)
+      continue;
+    if (int_index < offset_start || i >= count) {
+      _sym_write_memory((uint8_t*)&args[int_index], 8, NULL, 1);
+    } else {
+      // printf("ARG[%d]: value %lx\n", i, args[int_index]);
+      SymExpr expr = _sym_get_parameter_expression(i);
+      // printf("ARG[%d]: value %lx expr %p\n", i, args[int_index], expr);
+      size_t current_bits = 64;
+      if (expr) {
+        // printf("EXPR[%d]: %s\n", i, _sym_expr_to_string(expr));
+        current_bits = _sym_bits_helper(expr);
+#if 0
+        if (current_bits < 64) {
+          expr = _sym_build_zext(expr, 64 - current_bits);
+        }
+#endif
+      }
+      _sym_write_memory((uint8_t*)&args[int_index], current_bits / 8, expr, 1);
+    }
+    int_index += 1;
+    // printf("ARG: %lx\n", args[i]);
+  }
+
+  int_index = 0;
+  uint64_t* stack_args = (uint64_t*)ap[1];
+  for (int k = 0; i < count; i++, k++) {
+    int is_int = _sym_is_int_parameter(i);
+    // printf("ARG[%d] is int: %d\n", i, is_int);
+    if (!is_int)
+      continue;
+
+    SymExpr expr = _sym_get_parameter_expression(i);
+    size_t current_bits = 64;
+    if (expr) {
+      current_bits = _sym_bits_helper(expr);
+      // printf("EXPR[%d]: %s\n", i, _sym_expr_to_string(expr));
+    }
+    _sym_write_memory((uint8_t*)&stack_args[int_index], current_bits / 8, expr, 1);
+    int_index += 1;
+  }
+
+  for (unsigned int i = 0; i < sizeof(va_list) / 8; i++)
+    _sym_write_memory((uint8_t*)&ap[i], 8, NULL, 1);
 }

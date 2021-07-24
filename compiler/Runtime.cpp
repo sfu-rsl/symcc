@@ -70,6 +70,7 @@ Runtime::Runtime(Module &M) {
   buildBoolOr = import(M, "_sym_build_bool_or", ptrT, ptrT, ptrT);
   buildBoolXor = import(M, "_sym_build_bool_xor", ptrT, ptrT, ptrT);
   buildBoolToBits = import(M, "_sym_build_bool_to_bits", ptrT, ptrT, int8T);
+  buildBoolToSignBits = import(M, "_sym_build_bool_to_sign_bits", ptrT, ptrT, int8T);
   pushPathConstraint = import(M, "_sym_push_path_constraint", voidT, ptrT,
                               IRB.getInt1Ty(), intPtrType);
 
@@ -180,6 +181,9 @@ Runtime::Runtime(Module &M) {
   wrapIndirectCallArgInt = import(M, "_sym_indirect_call_set_arg_int", voidT, int8T, IRB.getInt64Ty(), int8T);
   wrapIndirectCallArgCount = import(M, "_sym_indirect_call_set_arg_count", voidT, int8T);
   checkIndirectCallTarget = import(M, "_sym_check_indirect_call_target", voidT, IRB.getInt64Ty());
+  vaListStart = import(M, "_sym_va_list_start", voidT, ptrT);
+
+  checkConsistency = import(M, "_sym_check_consistency", voidT, ptrT, IRB.getInt64Ty(), IRB.getInt64Ty());
 }
 
 /// Decide whether a function is called symbolically.
