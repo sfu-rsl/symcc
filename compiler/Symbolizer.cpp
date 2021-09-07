@@ -107,6 +107,26 @@ void Symbolizer::shortCircuitExpressionUses() {
     for (const auto &input : symbolicComputation.inputs) {
       nullChecks.push_back(
           IRB.CreateICmpEQ(nullExpression, input.getSymbolicOperand()));
+#if HYBRID_DBG_CONSISTENCY_CHECK
+      Type* valueType = input.concreteValue->getType();
+
+      bool too_large = false;
+      if (IntegerType *IT = dyn_cast<IntegerType>(valueType))
+        too_large = IT->getBitWidth() > 64;
+
+      if (!too_large && (valueType->isIntegerTy() || valueType->isPointerTy())) {
+        IRB.CreateCall(
+          runtime.checkConsistency,
+          {
+            input.getSymbolicOperand(),
+            valueType->isPointerTy() 
+              ? IRB.CreateCast(Instruction::CastOps::PtrToInt, input.concreteValue, IRB.getInt64Ty())
+              : IRB.CreateCast(Instruction::CastOps::ZExt, input.concreteValue, IRB.getInt64Ty()),
+            ConstantInt::get(IRB.getInt64Ty(), 0)
+          }
+        );
+      }
+#endif
     }
     auto *allConcrete = nullChecks[0];
     for (unsigned argIndex = 1; argIndex < nullChecks.size(); argIndex++) {
@@ -402,6 +422,20 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
                           llvm::IntegerType::getInt8PtrTy(arg->getContext()))
                       : getSymbolicExpressionOrNull(arg),
                     ConstantInt::get(IRB.getInt8Ty(), isArgInteger(arg))});
+#if HYBRID_DBG_CONSISTENCY_CHECK
+    if (isArgInteger(arg)) {
+      IRB.CreateCall(
+        runtime.checkConsistency,
+        {
+          getSymbolicExpressionOrNull(arg),
+          arg->getType()->isPointerTy() 
+            ? IRB.CreateCast(Instruction::CastOps::PtrToInt, arg, IRB.getInt64Ty())
+            : IRB.CreateCast(Instruction::CastOps::ZExt, arg, IRB.getInt64Ty()),
+          ConstantInt::get(IRB.getInt64Ty(), 0)
+        }
+      );
+    }
+#endif
   }
 
   IRB.CreateCall(runtime.setParameterCount,
@@ -592,6 +626,20 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
       // printf("HERE 3b\n\n");
       symbolicExpressions[II] = IRB.CreateCall(runtime.getReturnExpressionWithTruncate, 
         ConstantInt::get(IRB.getInt8Ty(), retValSize));
+#if HYBRID_DBG_CONSISTENCY_CHECK
+      if (isArgInteger(II)) {
+        IRB.CreateCall(
+          runtime.checkConsistency,
+          {
+            getSymbolicExpressionOrNull(II),
+            retType->isPointerTy() 
+              ? IRB.CreateCast(Instruction::CastOps::PtrToInt, II, IRB.getInt64Ty())
+              : IRB.CreateCast(Instruction::CastOps::ZExt, II, IRB.getInt64Ty()),
+            ConstantInt::get(IRB.getInt64Ty(), 0)
+          }
+        );
+      }
+#endif
       // printf("HERE 3c\n\n");
     }
   }

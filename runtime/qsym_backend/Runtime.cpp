@@ -336,7 +336,7 @@ void _sym_push_path_constraint(SymExpr constraint, int taken,
   XXH32_update(&debug_state, &site_id, sizeof(site_id));
   debug_count += 1;
 
-  const char *s_expr = ""; //_sym_expr_to_string(constraint);
+  const char *s_expr = _sym_expr_to_string(constraint);
   printf("QUERY AT addr=%lx hash=%x counter=%d taken=%d: %s\n", site_id, debug_hash, debug_count, taken, s_expr);
 
   debug_hash = XXH32_digest(&debug_state);
@@ -551,6 +551,14 @@ void _sym_collect_garbage() {
 }
 
 #if HYBRID_DBG_CONSISTENCY_CHECK
+
+#if HYBRID_DBG_CONSISTENCY_ALT
+static int consistency_counter = 0;
+static int consistency_debug_mode = -1;
+static int consistency_check_counter = -1;
+static uint64_t consistency_check_value = 0;
+#endif
+
 void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr) {  
 #if 0
   uint64_t* a = (uint64_t*)0x40007fead0;
@@ -564,6 +572,40 @@ void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr
     printf("CONSISTENCY CHECK FAILED AT %lx\n", addr);
     assert(0);
   }
+#if HYBRID_DBG_CONSISTENCY_ALT
+  if (consistency_debug_mode == -1) {
+    consistency_debug_mode = 0;
+    char* s = getenv("SYM_CONSISTENCY_ALT");
+    if (s) {
+      s = getenv("SYM_CONSISTENCY_COUNTER");
+      if (s == NULL) 
+          consistency_debug_mode = 1;
+      else { 
+        consistency_debug_mode = 2;
+        consistency_check_counter = (int)strtoul(s, NULL, 10);
+        s = getenv("SYM_CONSISTENCY_VALUE");
+        assert(s);
+        consistency_check_value = (uint64_t)strtoul(s, NULL, 16);
+      }
+    }
+  }
+  if (consistency_debug_mode == 2) {
+    if (consistency_check_counter == consistency_counter) {
+      if (expected_value == consistency_check_value)
+        printf("Value is %lx but should be different from %lx\n", expected_value, consistency_check_value);
+      assert(expected_value != consistency_check_value && "Inconsistent value");
+      printf("ALTERNATIVE VALUE CHECK: OK\n");
+      exit(0);
+    }
+    consistency_counter++;
+    assert(consistency_counter <= consistency_check_counter);
+  } else if (consistency_debug_mode == 1) {
+    printf("ALT QUERY: %s\n", _sym_expr_to_string(expr));
+    g_solver->alternativeSolution(allocatedExpressions.at(expr), expected_value, consistency_counter++);
+    if (consistency_counter > 5000)
+      exit(0);
+  }
+#endif
 }
 #else
 void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr) {}

@@ -300,7 +300,7 @@ void _sym_libc_memmove(void *dest, const void *src, size_t n) {
 
 extern uintptr_t _sym_get_call_site(void);
 uint64_t _sym_wrap_indirect_call_int(uint64_t target) {
-#ifdef HYBRID_DBG_PRINT
+#if HYBRID_DBG_PRINT
   printf("call target: %lx count=%d callsite=%lx\n", target, g_function_arguments_concrete_count, _sym_get_call_site());
 #endif
   uint64_t res;
