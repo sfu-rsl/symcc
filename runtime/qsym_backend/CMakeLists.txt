@@ -83,6 +83,7 @@ target_include_directories(SymRuntime SYSTEM PRIVATE
 # We need to get the LLVM support component for llvm::APInt.
 llvm_map_components_to_libnames(QSYM_LLVM_DEPS support)
 
+target_link_libraries(SymRuntime ${CMAKE_CURRENT_SOURCE_DIR}/${QSYM_SOURCE_DIR}/external-libs/libZ3Fuzzy.a)
 target_link_libraries(SymRuntime ${Z3_LIBRARIES} ${QSYM_LLVM_DEPS})
 
 # We use std::filesystem, which has been added in C++17. Before its official
