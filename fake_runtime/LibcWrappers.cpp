@@ -82,4 +82,7 @@ const char *SYM(strchr)(const char *s, int c) { return NULL; }
 int SYM(memcmp)(const void *a, const void *b, size_t n) { return 0; }
 uint32_t SYM(ntohl)(uint32_t netlong) { return 0; }
 
+uint32_t SYM(strncmp)(const char *a, const char *b, size_t n) { return 0; }
+int SYM(bcmp)(const void *a, const void *b, size_t n) { return 0; }
+
 }

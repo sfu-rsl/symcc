@@ -399,6 +399,8 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
         || fun->getName() == "fread"
         || fun->getName() == "ftell"
         || fun->getName() == "fseek"
+        || fun->getName() == "fseek64"
+        || fun->getName() == "fseeko64"
         ) {
       // errs() << "\nConcretizing args for function " << fun->getName() << ": " << *retType << "\n\n";
       concretizeArg = true;

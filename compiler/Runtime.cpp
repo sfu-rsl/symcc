@@ -191,7 +191,7 @@ bool isInterceptedFunction(const Function &f) {
   static const StringSet<> kInterceptedFunctions = {
     // safe to run models instead of the actual user implementation
     "memcpy", "memset", "strncpy", "strchr",
-    "memcmp",   "memmove", "ntohl",
+    "memcmp",   "memmove", "ntohl", "strncmp", "bcmp"
     // these are not safe (e.g., they allocate blocks) to run
     // natively. We handle them during emulation.
     /*
