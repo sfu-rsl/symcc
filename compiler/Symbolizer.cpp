@@ -345,9 +345,11 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     break;
   }
   case Intrinsic::vastart: {
+#if HYBRID_HANDLE_VAR_ARGS
     IRBuilder<> IRB(&I);
     IRB.SetInsertPoint(I.getNextNode());
     IRB.CreateCall(runtime.vaListStart, I.getOperand(0));
+#endif
     break;
   }
   default:

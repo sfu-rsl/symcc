@@ -26,6 +26,10 @@
 
 #include "../../symqemu-hybrid/accel/tcg/hybrid/hybrid_debug.h"
 
+extern "C" {
+uint8_t concrete_mode = 0;
+}
+
 namespace {
 
 constexpr int kMaxFunctionArguments = 256;
@@ -42,8 +46,6 @@ uint8_t g_function_arguments_concrete_count = 0;
 uint64_t g_function_concrete_arguments[MAX_CONCRETE_ARGS];
 typedef uint64_t (*check_indirect_target_t)(uint64_t, uint64_t*, uint64_t);
 check_indirect_target_t check_indirect_target;
-
-uint8_t concrete_mode = 0;
 
 } // namespace
 
@@ -149,15 +151,25 @@ SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
   if (_sym_is_concrete_mode_enabled())
     return nullptr;
 
+#if 0
+  if (!_sym_interesting_context())
+    return nullptr;
+#endif
+
   // If the entire memory region is concrete, don't create a symbolic expression
   // at all.
   if (isConcrete(addr, length))
     return nullptr;
 
   ReadOnlyShadow shadow(addr, length);
+  bool concreteBytes = true;
   SymExpr res = std::accumulate(shadow.begin_non_null(), shadow.end_non_null(),
                          static_cast<SymExpr>(nullptr),
                          [&](SymExpr result, SymExpr byteExpr) {
+
+                            if (!_sym_expr_is_constant(byteExpr))
+                              concreteBytes = false;
+
                            if (result == nullptr)
                              return byteExpr;
 
@@ -165,9 +177,15 @@ SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
                                       ? _sym_concat_helper(byteExpr, result)
                                       : _sym_concat_helper(result, byteExpr);
                          });
+
+  if (concreteBytes)
+    res = nullptr;
+
 #if 0
-  const char *s_expr = _sym_expr_to_string(res);
-  printf("MEMORY READ at %p: %s\n", addr, s_expr);
+  if (res && !_sym_interesting_context()) {
+    const char *s_expr = _sym_expr_to_string(res);
+    printf("MEMORY READ at %p: %s @ %lx\n", addr, s_expr, _sym_get_basic_block_id());
+  }
 #endif
 
 #if HYBRID_DBG_CONSISTENCY_CHECK
@@ -216,6 +234,20 @@ void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,
 
   if (expr == nullptr && isConcrete(addr, length))
     return;
+
+#if 0
+  if (!_sym_interesting_context())
+    expr = nullptr;
+#endif
+
+  if (expr != nullptr && _sym_expr_is_constant(expr))
+    expr = nullptr;
+#if 0
+  if (expr && !_sym_interesting_context()) {
+    const char *s_expr = _sym_expr_to_string(expr);
+    printf("MEMORY WRITE at %p: %s @ %lx\n", addr, s_expr, _sym_get_call_site());
+  }
+#endif
 
   ReadWriteShadow shadow(addr, length);
   if (expr == nullptr) {

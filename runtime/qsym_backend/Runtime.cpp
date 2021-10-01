@@ -74,6 +74,10 @@ Solver *g_solver;
 CallStackManager g_call_stack_manager;
 z3::context *g_z3_context;
 
+#if HYBRID_CACHE_CONSTANTS
+ExprBuilder *CEB;
+#endif
+
 } // namespace qsym
 
 namespace {
@@ -182,6 +186,9 @@ void _sym_initialize_qemu(void) {
       new Solver(inputFileName, g_config.outputDir, g_config.aflCoverageMap);
   g_expr_builder = g_config.pruning ? PruneExprBuilder::create()
                                     : SymbolicExprBuilder::create();
+#if HYBRID_CACHE_CONSTANTS
+  CEB = g_expr_builder;
+#endif
 }
 
 SymExpr _sym_build_integer(uint64_t value, uint8_t bits) {
@@ -338,6 +345,7 @@ void _sym_push_path_constraint(SymExpr constraint, int taken,
 
   const char *s_expr = _sym_expr_to_string(constraint);
   printf("QUERY AT addr=%lx hash=%x counter=%d taken=%d: %s\n", site_id, debug_hash, debug_count, taken, s_expr);
+  g_call_stack_manager.printStack();
 
   debug_hash = XXH32_digest(&debug_state);
   if (debug_mode) {
@@ -360,7 +368,7 @@ void _sym_push_path_constraint(SymExpr constraint, int taken,
   }
 
   if (!debug_mode)
-#elif HYBRID_DBG_PRINT
+#elif HYBRID_DBG_PRINT || HYBRID_DBG_PRINT_QUERY_ADDR
   printf("QUERY AT addr=%lx taken=%d\n", site_id, taken);
 #endif
   g_solver->addJcc(allocatedExpressions.at(constraint), taken != 0, site_id);
@@ -484,6 +492,10 @@ void _sym_notify_basic_block(uintptr_t site_id) {
   printf("BB: %lx\n", site_id);
 #endif
   g_call_stack_manager.visitBasicBlock(site_id);
+}
+
+uintptr_t _sym_get_basic_block_id(){
+  return last_site_id;
 }
 
 //
@@ -610,3 +622,11 @@ void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr
 #else
 void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr) {}
 #endif
+
+int _sym_interesting_context(void) {
+  return g_call_stack_manager.isInteresting();
+}
+
+int _sym_expr_is_constant(SymExpr expr) {
+  return expr->isConstant();
+}

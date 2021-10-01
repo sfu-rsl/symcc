@@ -124,3 +124,5 @@ void _sym_check_indirect_call_target(uint64_t target) {}
 void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr) {}
 void _sym_va_list_start(uint8_t* ap) {}
 SymExpr _sym_build_bool_to_sign_bits(SymExpr expr, uint8_t bits) { return NULL; }
+int _sym_interesting_context(void) { return 0; }
+uintptr_t _sym_get_basic_block_id(void) { return 0; }

@@ -205,6 +205,9 @@ int _sym_set_concrete_mode(int v);
 
 void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr);
 void _sym_va_list_start(uint64_t* ap);
+int _sym_interesting_context(void);
+int _sym_expr_is_constant(SymExpr expr);
+uintptr_t _sym_get_basic_block_id(void);
 
 #ifdef __cplusplus
 }

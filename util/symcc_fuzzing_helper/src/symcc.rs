@@ -475,7 +475,7 @@ impl SymCC {
 
         let mut analysis_command = Command::new("timeout");
         analysis_command
-            .args(&["-k", "5", &TIMEOUT.to_string()])
+            .args(&["-k", "1", &TIMEOUT.to_string()])
             .args(&self.command)
             .env("SYMCC_ENABLE_LINEARIZATION", "1")
             .env("SYMCC_AFL_COVERAGE_MAP", &self.bitmap)
