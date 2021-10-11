@@ -28,6 +28,7 @@
 
 extern "C" {
 uint8_t concrete_mode = 0;
+uint8_t emulation_mode = 1;
 }
 
 namespace {
@@ -182,7 +183,7 @@ SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) {
     res = nullptr;
 
 #if 0
-  if (res && !_sym_interesting_context()) {
+  if (res) { // && !_sym_interesting_context()
     const char *s_expr = _sym_expr_to_string(res);
     printf("MEMORY READ at %p: %s @ %lx\n", addr, s_expr, _sym_get_basic_block_id());
   }
@@ -243,7 +244,7 @@ void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,
   if (expr != nullptr && _sym_expr_is_constant(expr))
     expr = nullptr;
 #if 0
-  if (expr && !_sym_interesting_context()) {
+  if (expr) { // && !_sym_interesting_context()
     const char *s_expr = _sym_expr_to_string(expr);
     printf("MEMORY WRITE at %p: %s @ %lx\n", addr, s_expr, _sym_get_call_site());
   }
@@ -465,6 +466,15 @@ int _sym_is_concrete_mode_enabled(void) {
 
 int _sym_set_concrete_mode(int v) {
   concrete_mode = v; 
+  return v;
+}
+
+int _sym_is_emulation_mode_enabled(void) {
+  return emulation_mode; 
+}
+
+int _sym_set_emulation_mode(int v) {
+  emulation_mode = v; 
   return v;
 }
 

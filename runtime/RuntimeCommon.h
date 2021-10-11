@@ -202,6 +202,8 @@ void _sym_check_indirect_call_target(uint64_t target);
 
 int _sym_is_concrete_mode_enabled(void);
 int _sym_set_concrete_mode(int v);
+int _sym_is_emulation_mode_enabled(void);
+int _sym_set_emulation_mode(int v);
 
 void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr);
 void _sym_va_list_start(uint64_t* ap);

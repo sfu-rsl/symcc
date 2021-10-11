@@ -396,7 +396,7 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
     if (fun->getName() == "malloc" 
         || fun->getName() == "free" 
         || fun->getName() == "calloc" 
-        || fun->getName() == "realloc"
+        // || fun->getName() == "realloc"
         || fun->getName() == "fopen"
         || fun->getName() == "fread"
         || fun->getName() == "ftell"
@@ -1202,13 +1202,21 @@ void Symbolizer::visitSwitchInst(SwitchInst &I) {
 
   // In the constraint block, we push one path constraint per case.
   IRB.SetInsertPoint(constraintBlock);
+  int k = 0;
   for (auto &caseHandle : I.cases()) {
     auto *caseTaken = IRB.CreateICmpEQ(condition, caseHandle.getCaseValue());
     auto *caseConstraint = IRB.CreateCall(
         runtime.comparisonHandlers[CmpInst::ICMP_EQ],
         {conditionExpr, createValueExpression(caseHandle.getCaseValue(), IRB)});
     IRB.CreateCall(runtime.pushPathConstraint,
+#if HYBRID_SWITCH_TARGETS
+                   {caseConstraint, caseTaken, 
+                   ConstantInt::get(intPtrType,
+                                  reinterpret_cast<uint64_t>(&I) + (k == 0 ? 0 : (0x10000 + k)))});
+#else
                    {caseConstraint, caseTaken, getTargetPreferredInt(&I)});
+#endif
+    k += 1;
   }
 }
 
