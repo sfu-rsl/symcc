@@ -714,6 +714,9 @@ void Symbolizer::visitSelectInst(SelectInst &I) {
   // negated) condition to the path constraints and copy the symbolic
   // expression over from the chosen argument.
 
+  if (!I.getCondition()->getType()->isPointerTy() && !I.getCondition()->getType()->isIntegerTy())
+      return;
+
   IRBuilder<> IRB(&I);
   auto runtimeCall = buildRuntimeCall(IRB, runtime.pushPathConstraint,
                                       {{I.getCondition(), true},
@@ -755,6 +758,9 @@ void Symbolizer::visitBranchInst(BranchInst &I) {
   // the path constraints.
 
   if (I.isUnconditional())
+    return;
+
+  if (!I.getCondition()->getType()->isPointerTy() && !I.getCondition()->getType()->isIntegerTy())
     return;
 
   IRBuilder<> IRB(&I);
@@ -968,6 +974,12 @@ void Symbolizer::visitBitCastInst(BitCastInst &I) {
     return;
   }
 
+  if (!I.getSrcTy()->isPointerTy() || !I.getDestTy()->isPointerTy()) {
+    errs() << "Warning: Unhandled non-pointer bit cast " << I << '\n';
+    symbolicExpressions[&I] = nullptr;
+    return;
+  }
+
   assert(I.getSrcTy()->isPointerTy() && I.getDestTy()->isPointerTy() &&
          "Unhandled non-pointer bit cast");
   if (auto *expr = getSymbolicExpression(I.getOperand(0)))
@@ -1055,6 +1067,11 @@ void Symbolizer::visitCastInst(CastInst &I) {
   auto opcode = I.getOpcode();
   if (opcode != Instruction::SExt && opcode != Instruction::ZExt) {
     errs() << "Warning: unhandled cast instruction " << I << '\n';
+    return;
+  }
+
+  if (!I.getSrcTy()->isIntegerTy()) {
+    errs() << "Warning: source type is not integer: " << I << '\n';
     return;
   }
 
@@ -1299,6 +1316,9 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
          IRB.getInt8(0)});
   }
 
+  errs() << "Warning: unexpected constant type " << *valueType << '\n';
+  return IRB.CreateCall(runtime.buildNullPointer, {});
+
   llvm_unreachable("Unhandled type for constant expression");
 }
 
@@ -1324,6 +1344,10 @@ Symbolizer::forceBuildRuntimeCall(IRBuilder<> &IRB, SymFnT function,
 void Symbolizer::tryAlternative(IRBuilder<> &IRB, Value *V) {
   auto *destExpr = getSymbolicExpression(V);
   if (destExpr != nullptr) {
+
+    if (!V->getType()->isPointerTy() && !V->getType()->isIntegerTy())
+      return;
+
     auto *concreteDestExpr = createValueExpression(V, IRB);
     auto *destAssertion =
         IRB.CreateCall(runtime.comparisonHandlers[CmpInst::ICMP_EQ],

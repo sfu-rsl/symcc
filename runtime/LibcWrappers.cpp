@@ -594,4 +594,62 @@ int SYM(bcmp)(const void *a, const void *b, size_t n) {
   return result;
 }
 
+uint32_t SYM(strcmp)(const char *a, const char *b) {
+  tryAlternative(a, _sym_get_parameter_expression(0), _sym_get_call_site());
+  tryAlternative(b, _sym_get_parameter_expression(1), _sym_get_call_site());
+
+  auto result = strcmp(a, b);
+  _sym_set_return_expression(nullptr);
+
+  size_t a_len = strlen(a);
+  size_t b_len = strlen(b);
+
+  if (isConcrete(a, a_len) && isConcrete(b, b_len))
+    return result;
+
+  size_t n = a_len < b_len ? a_len : b_len;
+  if (n == 0)
+    return result;
+
+  auto aShadowIt = ReadOnlyShadow(a, n + 1).begin_non_null();
+  auto bShadowIt = ReadOnlyShadow(b, n + 1).begin_non_null();
+  auto *allEqual = _sym_build_equal(*aShadowIt, *bShadowIt);
+  for (size_t i = 1; i < n + 1; i++) {
+    ++aShadowIt;
+    ++bShadowIt;
+    allEqual =
+        _sym_build_bool_and(allEqual, _sym_build_equal(*aShadowIt, *bShadowIt));
+  }
+
+  _sym_push_path_constraint(allEqual, result == 0,
+                            reinterpret_cast<uintptr_t>(_sym_get_call_site()));
+  
+  return result;
+}
+
+uint32_t SYM(strlen)(const char *a) {
+  tryAlternative(a, _sym_get_parameter_expression(0), _sym_get_call_site());
+
+  auto result = strlen(a);
+  _sym_set_return_expression(nullptr);
+
+  if (isConcrete(a, result) || result == 0)
+    return result;
+
+  auto aShadowIt = ReadOnlyShadow(a, result).begin_non_null();
+  auto *allEqual = _sym_build_integer(result, 64);
+  auto *zero = _sym_build_integer(0, 8);
+  int k = 0;
+  for (int i = result - 1; i >= 0; i--) {
+    printf("k = %d\n", k);
+    allEqual = _sym_build_ite(_sym_build_equal(*aShadowIt, zero), _sym_build_integer(k++, 64), allEqual);
+    ++aShadowIt;
+  }
+
+  printf("strlen(%s) = %d\n", a, result);
+
+  _sym_set_return_expression(allEqual);  
+  return result;
+}
+
 }

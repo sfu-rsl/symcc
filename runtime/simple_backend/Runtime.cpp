@@ -569,3 +569,7 @@ int _sym_expr_is_constant(SymExpr expr) {
 uintptr_t _sym_get_basic_block_id(void) {
   return 0;
 }
+
+SymExpr _sym_build_ite(SymExpr cond, SymExpr a, SymExpr b) {
+  return nullptr;
+}

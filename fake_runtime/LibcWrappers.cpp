@@ -84,5 +84,7 @@ uint32_t SYM(ntohl)(uint32_t netlong) { return 0; }
 
 uint32_t SYM(strncmp)(const char *a, const char *b, size_t n) { return 0; }
 int SYM(bcmp)(const void *a, const void *b, size_t n) { return 0; }
+uint32_t SYM(strcmp)(const char *a, const char *b) { return 0; }
+uint32_t SYM(strlen)(const char *a) { return 0; }
 
 }

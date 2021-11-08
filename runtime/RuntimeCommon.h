@@ -130,6 +130,8 @@ SymExpr _sym_concat_helper(SymExpr a, SymExpr b);
 SymExpr _sym_extract_helper(SymExpr expr, size_t first_bit, size_t last_bit);
 size_t _sym_bits_helper(SymExpr expr);
 
+SymExpr _sym_build_ite(SymExpr cond, SymExpr a, SymExpr b);
+
 /*
  * Function-call helpers
  */

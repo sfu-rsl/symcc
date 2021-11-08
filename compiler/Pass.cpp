@@ -45,7 +45,7 @@ bool SymbolizePass::doInitialization(Module &M) {
     auto name = function.getName();
     if (isInterceptedFunction(function)) {
       function.setName(name + "_symbolized");
-      // errs() << "Renaming function to " << function.getName() << "\n";
+      errs() << "Renaming function to " << function.getName() << "\n";
     } else {
       // errs() << "Leaving function " << function.getName() << "\n";
     }

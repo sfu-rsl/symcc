@@ -630,3 +630,11 @@ int _sym_interesting_context(void) {
 int _sym_expr_is_constant(SymExpr expr) {
   return expr->isConstant();
 }
+
+SymExpr _sym_build_ite(SymExpr cond, SymExpr a, SymExpr b) {
+  return registerExpression(g_expr_builder->createIte(
+      allocatedExpressions.at(cond),
+      allocatedExpressions.at(a),
+      allocatedExpressions.at(b)
+  ));
+}

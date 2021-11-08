@@ -29,3 +29,5 @@ static struct llvm::RegisterStandardPasses
     Y(llvm::PassManagerBuilder::EP_VectorizerStart, addSymbolizePass);
 static struct llvm::RegisterStandardPasses
     Z(llvm::PassManagerBuilder::EP_EnabledOnOptLevel0, addSymbolizePass);
+// static struct llvm::RegisterStandardPasses
+//    Z(llvm::PassManagerBuilder::EP_OptimizerLast, addSymbolizePass);
