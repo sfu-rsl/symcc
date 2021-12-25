@@ -72,7 +72,7 @@ if (${TARGET_32BIT})
   set(SYM_RUNTIME_32BIT_DIR ${BINARY_DIR})
 endif()
 
-find_package(LLVM REQUIRED CONFIG)
+find_package(LLVM 12 REQUIRED CONFIG)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake from ${LLVM_DIR}")
@@ -105,7 +105,7 @@ if (NOT LLVM_ENABLE_RTTI)
   set_target_properties(Symbolize PROPERTIES COMPILE_FLAGS "-fno-rtti")
 endif()
 
-find_program(CLANG_BINARY "clang"
+find_program(CLANG_BINARY 12 "clang"
   HINTS ${LLVM_TOOLS_BINARY_DIR}
   DOC "The clang binary to use in the symcc wrapper script.")
 find_program(CLANGPP_BINARY "clang++"
@@ -115,7 +115,13 @@ if (NOT CLANG_BINARY)
   message(FATAL_ERROR "Clang not found; please make sure that the version corresponding to your LLVM installation is available.")
 endif()
 
-configure_file("compiler/symcc.in" "symcc" @ONLY)
-configure_file("compiler/sym++.in" "sym++" @ONLY)
+
+if (${LLVM_VERSION_MAJOR} GREATER 12)
+	configure_file("compiler/symcc13.in" "symcc" @ONLY)
+	configure_file("compiler/sym13++.in" "sym++" @ONLY)
+else()
+	configure_file("compiler/symcc.in" "symcc" @ONLY)
+	configure_file("compiler/sym++.in" "sym++" @ONLY)
+endif()
 
 add_subdirectory(test)
