@@ -130,7 +130,7 @@ void _sym_notify_basic_block(uintptr_t site_id) {}
 //
 
 const char *_sym_expr_to_string(SymExpr expr) {return NULL; }
-bool _sym_feasible(SymExpr expr) { return false; }
+int _sym_feasible(SymExpr expr) { return 0; }
 
 //
 // Garbage collection

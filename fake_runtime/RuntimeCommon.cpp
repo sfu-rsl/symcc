@@ -41,9 +41,9 @@ void _sym_set_args_count(uint8_t n) {}
 void _sym_memcpy(uint8_t *dest, const uint8_t *src, size_t length) {}
 void _sym_memset(uint8_t *memory, SymExpr value, size_t length) {}
 void _sym_memmove(uint8_t *dest, const uint8_t *src, size_t length) {}
-SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian) { return NULL; }
-void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,
-                       bool little_endian) {}
+SymExpr _sym_read_memory(SymExpr addrExpr, uint8_t *addr, size_t length, bool little_endian) { return NULL; }
+void _sym_write_memory(SymExpr addrExpr, uint8_t *addr, size_t length, SymExpr expr,
+                       bool little_endian, uint64_t value) {}
 SymExpr _sym_build_extract(SymExpr expr, uint64_t offset, uint64_t length,
                            bool little_endian) { return NULL; }
 SymExpr _sym_build_bswap(SymExpr expr) { return NULL; }
@@ -128,3 +128,6 @@ int _sym_interesting_context(void) { return 0; }
 uintptr_t _sym_get_basic_block_id(void) { return 0; }
 
 SymExpr _sym_build_ite(SymExpr cond, SymExpr a, SymExpr b) { return nullptr; }
+SymExpr _sym_build_array_read(void* updateList, SymExpr index) { return nullptr; }
+void _sym_concretize_memory(uint8_t *addr, size_t length) {}
+void _sym_print_stack(void) {}

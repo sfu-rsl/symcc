@@ -154,9 +154,9 @@ SymExpr _sym_get_input_byte(size_t offset);
 /*
  * Memory management
  */
-SymExpr _sym_read_memory(uint8_t *addr, size_t length, bool little_endian);
-void _sym_write_memory(uint8_t *addr, size_t length, SymExpr expr,
-                       bool little_endian);
+SymExpr _sym_read_memory(SymExpr addrExpr, uint8_t *addr, size_t length, bool little_endian);
+void _sym_write_memory(SymExpr addrExpr, uint8_t *addr, size_t length, SymExpr expr,
+                       bool little_endian, uint64_t value);
 void _sym_memcpy(uint8_t *dest, const uint8_t *src, size_t length);
 void _sym_memset(uint8_t *memory, SymExpr value, size_t length);
 void _sym_memmove(uint8_t *dest, const uint8_t *src, size_t length);
@@ -176,7 +176,7 @@ void _sym_notify_basic_block(uintptr_t site_id);
  * Debugging
  */
 const char *_sym_expr_to_string(SymExpr expr); // statically allocated
-bool _sym_feasible(SymExpr expr);
+int _sym_feasible(SymExpr expr);
 
 void _sym_print_path_constraints(void);
 void _sym_debug_function_after_return(uint8_t *addr);
@@ -205,6 +205,11 @@ void _sym_va_list_start(uint8_t* ap);
 SymExpr _sym_build_bool_to_sign_bits(SymExpr expr, uint8_t bits);
 int _sym_interesting_context(void);
 uintptr_t _sym_get_basic_block_id(void);
+
+SymExpr _sym_build_ite(SymExpr cond, SymExpr a, SymExpr b);
+SymExpr _sym_build_array_read(void* updateList, SymExpr index);
+void _sym_concretize_memory(uint8_t *addr, size_t length);
+void _sym_print_stack(void);
 
 #ifdef __cplusplus
 }

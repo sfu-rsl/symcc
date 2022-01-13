@@ -91,6 +91,7 @@ struct Runtime {
 
   SymFnT checkConsistency{};
   SymFnT vaListStart{};
+  SymFnT concretizeMemory{};
 
   /// Mapping from icmp predicates to the functions that build the corresponding
   /// symbolic expressions.

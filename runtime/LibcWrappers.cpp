@@ -139,18 +139,10 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
 
   if (result < 0)
     return result;
-
-  if (fildes == inputFileDescriptor) {
-    // Reading symbolic input.
-    ReadWriteShadow shadow(buf, result);
-    std::generate(shadow.begin(), shadow.end(),
-                  []() { 
-                    return _sym_get_input_byte(inputOffset++); 
-                  });
-  } else if (!isConcrete(buf, result)) {
-    ReadWriteShadow shadow(buf, result);
-    std::fill(shadow.begin(), shadow.end(), nullptr);
-  }
+    
+  ReadWriteShadow shadow(buf, result);
+  for (auto shadowByte = shadow.begin(); shadowByte != shadow.end(); ++shadowByte)
+    shadowByte.writeByte(fildes == inputFileDescriptor ? _sym_get_input_byte(inputOffset++) : nullptr);
 
   return result;
 }
@@ -254,17 +246,9 @@ size_t SYM(fread)(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   auto result = fread(ptr, size, nmemb, stream);
   _sym_set_return_expression(nullptr);
 
-  if (fileno(stream) == inputFileDescriptor) {
-    // Reading symbolic input.
-    ReadWriteShadow shadow(ptr, result * size);
-    std::generate(shadow.begin(), shadow.end(),
-                  []() { 
-                    return _sym_get_input_byte(inputOffset++); 
-                  });
-  } else if (!isConcrete(ptr, result * size)) {
-    ReadWriteShadow shadow(ptr, result * size);
-    std::fill(shadow.begin(), shadow.end(), nullptr);
-  }
+  ReadWriteShadow shadow(ptr, result * size);
+  for (auto shadowByte = shadow.begin(); shadowByte != shadow.end(); ++shadowByte)
+    shadowByte.writeByte(fileno(stream) == inputFileDescriptor ? _sym_get_input_byte(inputOffset++) : nullptr);
 
   return result;
 }
@@ -276,15 +260,9 @@ char *SYM(fgets)(char *str, int n, FILE *stream) {
   auto result = fgets(str, n, stream);
   _sym_set_return_expression(_sym_get_parameter_expression(0));
 
-  if (fileno(stream) == inputFileDescriptor) {
-    // Reading symbolic input.
-    ReadWriteShadow shadow(str, sizeof(char) * strlen(str));
-    std::generate(shadow.begin(), shadow.end(),
-                  []() { return _sym_get_input_byte(inputOffset++); });
-  } else if (!isConcrete(str, sizeof(char) * strlen(str))) {
-    ReadWriteShadow shadow(str, sizeof(char) * strlen(str));
-    std::fill(shadow.begin(), shadow.end(), nullptr);
-  }
+  ReadWriteShadow shadow(str, sizeof(char) * strlen(str));
+  for (auto shadowByte = shadow.begin(); shadowByte != shadow.end(); ++shadowByte)
+    shadowByte.writeByte(fileno(stream) == inputFileDescriptor ? _sym_get_input_byte(inputOffset++) : nullptr);
 
   return result;
 }
@@ -453,10 +431,14 @@ char *SYM(strncpy)(char *dest, const char *src, size_t n) {
   auto srcShadow = ReadOnlyShadow(src, copied);
   auto destShadow = ReadWriteShadow(dest, n);
 
-  std::copy(srcShadow.begin(), srcShadow.end(), destShadow.begin());
+  auto shadowDstByte = destShadow.begin();
+  for (auto shadowSrcByte = srcShadow.begin(); shadowSrcByte != srcShadow.end(); ++shadowDstByte, ++shadowSrcByte)
+    shadowDstByte.writeByte(*shadowSrcByte);
+
   if (copied < n) {
     ReadWriteShadow destRestShadow(dest + copied, n - copied);
-    std::fill(destRestShadow.begin(), destRestShadow.end(), nullptr);
+    for (auto shadowDstByte = destRestShadow.begin(); shadowDstByte != destRestShadow.end(); ++shadowDstByte)
+      shadowDstByte.writeByte(nullptr);
   }
 
   return result;
@@ -604,8 +586,9 @@ uint32_t SYM(strcmp)(const char *a, const char *b) {
   size_t a_len = strlen(a);
   size_t b_len = strlen(b);
 
-  if (isConcrete(a, a_len) && isConcrete(b, b_len))
+  if (isConcrete(a, a_len) && isConcrete(b, b_len)) {
     return result;
+  }
 
   size_t n = a_len < b_len ? a_len : b_len;
   if (n == 0)
@@ -646,7 +629,7 @@ uint32_t SYM(strlen)(const char *a) {
     ++aShadowIt;
   }
 
-  printf("strlen(%s) = %d\n", a, result);
+  // printf("strlen(%s) = %ld\n", a, result);
 
   _sym_set_return_expression(allEqual);  
   return result;

@@ -154,9 +154,9 @@ Runtime::Runtime(Module &M) {
   memset = import(M, "_sym_memset", voidT, ptrT, ptrT, intPtrType);
   memmove = import(M, "_sym_memmove", voidT, ptrT, ptrT, intPtrType);
   readMemory =
-      import(M, "_sym_read_memory", ptrT, intPtrType, intPtrType, int8T);
-  writeMemory = import(M, "_sym_write_memory", voidT, intPtrType, intPtrType,
-                       ptrT, int8T);
+      import(M, "_sym_read_memory", ptrT, ptrT, intPtrType, intPtrType, int8T);
+  writeMemory = import(M, "_sym_write_memory", voidT, ptrT, intPtrType, intPtrType,
+                       ptrT, int8T, IRB.getInt64Ty());
   buildExtract = import(M, "_sym_build_extract", ptrT, ptrT, IRB.getInt64Ty(),
                         IRB.getInt64Ty(), int8T);
 
@@ -182,6 +182,7 @@ Runtime::Runtime(Module &M) {
   wrapIndirectCallArgCount = import(M, "_sym_indirect_call_set_arg_count", voidT, int8T);
   checkIndirectCallTarget = import(M, "_sym_check_indirect_call_target", voidT, IRB.getInt64Ty());
   vaListStart = import(M, "_sym_va_list_start", voidT, ptrT);
+  concretizeMemory = import(M, "_sym_concretize_memory", voidT, intPtrType, intPtrType);
 
   checkConsistency = import(M, "_sym_check_consistency", voidT, ptrT, IRB.getInt64Ty(), IRB.getInt64Ty());
 }

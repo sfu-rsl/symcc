@@ -396,7 +396,7 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
     if (fun->getName() == "malloc" 
         || fun->getName() == "free" 
         || fun->getName() == "calloc" 
-        // || fun->getName() == "realloc"
+        || fun->getName() == "realloc"
         || fun->getName() == "fopen"
         || fun->getName() == "fread"
         || fun->getName() == "ftell"
@@ -804,12 +804,14 @@ void Symbolizer::visitLoadInst(LoadInst &I) {
   IRBuilder<> IRB(&I);
 
   auto *addr = I.getPointerOperand();
+#if 0
   tryAlternative(IRB, addr);
-
+#endif
   auto *dataType = I.getType();
   auto *data = IRB.CreateCall(
       runtime.readMemory,
-      {IRB.CreatePtrToInt(addr, intPtrType),
+      {getSymbolicExpressionOrNull(addr),
+       IRB.CreatePtrToInt(addr, intPtrType),
        ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
        ConstantInt::get(IRB.getInt8Ty(), isLittleEndian(dataType) ? 1 : 0)});
 
@@ -822,23 +824,76 @@ void Symbolizer::visitLoadInst(LoadInst &I) {
 }
 
 void Symbolizer::visitStoreInst(StoreInst &I) {
-  IRBuilder<> IRB(&I);
-
+#if 0
   tryAlternative(IRB, I.getPointerOperand());
+#endif
 
-  auto *data = getSymbolicExpressionOrNull(I.getValueOperand());
-  auto *dataType = I.getValueOperand()->getType();
+  Value* arg = I.getValueOperand();
+  auto *data = getSymbolicExpressionOrNull(arg);
+  auto *dataType = arg->getType();
+  
+  auto instruction = dataType->isPointerTy() || dataType->isIntegerTy() ? &I : I.getNextNode(); 
+  IRBuilder<> IRB(instruction);
+
   if (dataType->isFloatingPointTy()) {
     data = IRB.CreateCall(runtime.buildFloatToBits, data);
   }
 
-  IRB.CreateCall(
+  bool unsupportedSize = false;
+  Value* value = nullptr;
+  if (dataType->isPointerTy()) {
+    value = IRB.CreateCast(Instruction::CastOps::PtrToInt, arg, IRB.getInt64Ty());
+  } else if (dataType->isIntegerTy()) {
+    if (dataType->getScalarSizeInBits() < 64)
+      value = IRB.CreateCast(Instruction::CastOps::ZExt, arg, IRB.getInt64Ty());
+    else if (dataType->getScalarSizeInBits() == 64)
+      value = arg;
+    else
+      unsupportedSize = true;
+  } else {
+
+    unsigned size = dataType->getScalarSizeInBits();
+    Type* intType;
+    switch (size) {
+      case 8: intType = IRB.getInt8Ty(); break;
+      case 16: intType = IRB.getInt16Ty(); break;
+      case 32: intType = IRB.getInt32Ty(); break;
+      case 64: intType = IRB.getInt64Ty(); break;
+      default: {
+        errs() << "Unknown write size " << I << '\n';
+        unsupportedSize = true;
+        break;
+      }
+    }
+
+    if (!unsupportedSize) {
+      value = IRB.CreateBitCast(arg, intType);
+      if (intType->getScalarSizeInBits() < 64)
+        value = IRB.CreateCast(Instruction::CastOps::ZExt, value, IRB.getInt64Ty());
+    }
+  }
+
+  if (!unsupportedSize)
+    IRB.CreateCall(
       runtime.writeMemory,
-      {IRB.CreatePtrToInt(I.getPointerOperand(), intPtrType),
-       ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
-       data,
-       ConstantInt::get(IRB.getInt8Ty(), dataLayout.isLittleEndian() ? 1 : 0)});
-  
+      {
+        getSymbolicExpressionOrNull(I.getPointerOperand()),
+        IRB.CreatePtrToInt(I.getPointerOperand(), intPtrType),
+        ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
+        data,
+        ConstantInt::get(IRB.getInt8Ty(), dataLayout.isLittleEndian() ? 1 : 0),
+        value
+      }
+    );
+  else
+    IRB.CreateCall(
+      runtime.concretizeMemory,
+      {
+        IRB.CreatePtrToInt(I.getPointerOperand(), intPtrType),
+        ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
+      }
+    );
+
 #if HYBRID_DBG_CONSISTENCY_CHECK
   if (data) {
 
@@ -1310,7 +1365,9 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
     IRB.CreateStore(V, memory);
     return IRB.CreateCall(
         runtime.readMemory,
-        {IRB.CreatePtrToInt(memory, intPtrType),
+        {llvm::ConstantPointerNull::get(
+          llvm::IntegerType::getInt8PtrTy(V->getContext())),
+         IRB.CreatePtrToInt(memory, intPtrType),
          ConstantInt::get(intPtrType,
                           dataLayout.getTypeStoreSize(V->getType())),
          IRB.getInt8(0)});

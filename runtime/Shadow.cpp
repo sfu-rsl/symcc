@@ -12,6 +12,15 @@
 // You should have received a copy of the GNU General Public License along with
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-#include "Shadow.h"
+#include <stdint.h>
 
-std::map<uintptr_t, SymExpr *> g_shadow_pages;
+extern "C" {
+uintptr_t page_start_check;
+uintptr_t page_end_check;
+uintptr_t page_address_check;
+}
+
+#include "Shadow.h"
+#include "PageState.cpp"
+
+std::map<uintptr_t, PageState*> g_shadow_pages;

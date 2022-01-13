@@ -27,6 +27,8 @@ void registerExpressionRegion(ExpressionRegion r) {
 }
 
 std::set<SymExpr> collectReachableExpressions() {
+  abort();
+#if 0
   std::set<SymExpr> reachableExpressions;
   auto collectReachableExpressions = [&](ExpressionRegion r) {
     auto *end = r.first + r.second;
@@ -46,4 +48,5 @@ std::set<SymExpr> collectReachableExpressions() {
   }
 
   return reachableExpressions;
+#endif
 }

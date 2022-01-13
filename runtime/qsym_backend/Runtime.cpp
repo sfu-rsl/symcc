@@ -459,7 +459,7 @@ void _sym_notify_call(uintptr_t site_id) {
   g_call_stack_manager.visitCall(site_id);
 }
 
-void _sym_update_call(uintptr_t site_id) {
+void _sym_update_call(__attribute__((unused)) uintptr_t site_id) {
   assert(0);
   // g_call_stack_manager.updateVisitCall(site_id);
 }
@@ -513,15 +513,23 @@ const char *_sym_expr_to_string(SymExpr expr) {
   return buffer;
 }
 
-bool _sym_feasible(SymExpr expr) {
-  expr->simplify();
+int _sym_feasible(SymExpr expr) {
+  return g_solver->isFeasible(allocatedExpressions.at(expr));
+#if 0
+  // expr->simplify();
 
-  g_solver->push();
+  // g_solver->reset();
+  // g_solver->syncConstraints(allocatedExpressions.at(expr));
+
+  // g_solver->push();
   g_solver->add(expr->toZ3Expr());
   bool feasible = (g_solver->check() == z3::sat);
-  g_solver->pop();
+  // g_solver->pop();
+
+  g_solver->reset();
 
   return feasible;
+#endif
 }
 
 //
@@ -582,6 +590,8 @@ void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr
   int res = g_solver->checkConsistency(allocatedExpressions.at(expr), expected_value);
   if (res == 0) {
     printf("CONSISTENCY CHECK FAILED AT %lx\n", addr);
+    _sym_print_stack();
+    printf("BB ID: %lx\n", _sym_get_basic_block_id());
     assert(0);
   }
 #if HYBRID_DBG_CONSISTENCY_ALT
@@ -620,7 +630,7 @@ void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr
 #endif
 }
 #else
-void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr) {}
+void _sym_check_consistency(__attribute__((unused)) SymExpr expr, __attribute__((unused)) uint64_t expected_value, __attribute__((unused)) uint64_t addr) {}
 #endif
 
 int _sym_interesting_context(void) {
@@ -637,4 +647,13 @@ SymExpr _sym_build_ite(SymExpr cond, SymExpr a, SymExpr b) {
       allocatedExpressions.at(a),
       allocatedExpressions.at(b)
   ));
+}
+
+SymExpr _sym_build_array_read(void* updateList, SymExpr index) {
+  return registerExpression(
+      g_expr_builder->createArraySelect(allocatedExpressions.at(index), updateList));
+}
+
+void _sym_print_stack(void) {
+  g_call_stack_manager.printStack();
 }

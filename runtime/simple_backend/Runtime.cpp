@@ -501,7 +501,7 @@ const char *_sym_expr_to_string(SymExpr expr) {
   return Z3_ast_to_string(g_context, expr);
 }
 
-bool _sym_feasible(SymExpr expr) {
+int _sym_feasible(SymExpr expr) {
   expr = Z3_simplify(g_context, expr);
   Z3_inc_ref(g_context, expr);
 
@@ -571,5 +571,13 @@ uintptr_t _sym_get_basic_block_id(void) {
 }
 
 SymExpr _sym_build_ite(SymExpr cond, SymExpr a, SymExpr b) {
+  abort();
   return nullptr;
 }
+
+SymExpr _sym_build_array_read(void* updateList, SymExpr index) {
+  abort();
+  return nullptr;
+}
+
+void _sym_print_stack(void) {}
