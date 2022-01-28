@@ -12,16 +12,15 @@
 // You should have received a copy of the GNU General Public License along with
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-#include "Pass.h"
 
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/IR/InstIterator.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
-
-#include "Runtime.h"
-#include "Symbolizer.h"
+#include <llvm/Transforms/Symbolize/Pass.h>
+#include <llvm/Transforms/Symbolize/Runtime.h>
+#include <llvm/Transforms/Symbolize/Symbolizer.h>
 
 using namespace llvm;
 

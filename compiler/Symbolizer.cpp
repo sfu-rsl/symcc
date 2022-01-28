@@ -12,16 +12,14 @@
 // You should have received a copy of the GNU General Public License along with
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-#include "Symbolizer.h"
-
 #include <cstdint>
 #include <llvm/ADT/SmallPtrSet.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/GetElementPtrTypeIterator.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
-
-#include "Runtime.h"
+#include <llvm/Transforms/Symbolize/Runtime.h>
+#include <llvm/Transforms/Symbolize/Symbolizer.h>
 
 // #include "../../symqemu-hybrid/accel/tcg/hybrid/hybrid_debug.h"
 #define HYBRID_DBG_CONSISTENCY_CHECK 0
