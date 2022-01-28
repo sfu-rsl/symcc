@@ -20,7 +20,6 @@
 #include <llvm/IR/InstVisitor.h>
 #include <llvm/IR/ValueMap.h>
 #include <llvm/Support/raw_ostream.h>
-#include <optional>
 
 #include "Runtime.h"
 
@@ -226,7 +225,7 @@ private:
   /// resulting SymbolicComputation. If all symbolic arguments are known to be
   /// concrete (e.g., because they are compile-time constants), no call
   /// instruction is emitted and the function returns null.
-  std::optional<SymbolicComputation>
+  llvm::Optional<SymbolicComputation>
   buildRuntimeCall(llvm::IRBuilder<> &IRB, SymFnT function,
                    llvm::ArrayRef<std::pair<llvm::Value *, bool>> args) {
     if (std::all_of(args.begin(), args.end(),
@@ -240,7 +239,7 @@ private:
   }
 
   /// Convenience overload that treats all arguments as symbolic.
-  std::optional<SymbolicComputation>
+  llvm::Optional<SymbolicComputation>
   buildRuntimeCall(llvm::IRBuilder<> &IRB, SymFnT function,
                    llvm::ArrayRef<llvm::Value *> symbolicArgs) {
     std::vector<std::pair<llvm::Value *, bool>> args;
@@ -263,7 +262,7 @@ private:
 
   /// Convenience overload for chaining with buildRuntimeCall.
   void registerSymbolicComputation(
-      const std::optional<SymbolicComputation> &computation,
+      const llvm::Optional<SymbolicComputation> &computation,
       llvm::Value *concrete = nullptr) {
     if (computation)
       registerSymbolicComputation(*computation, concrete);
