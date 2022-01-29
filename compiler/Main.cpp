@@ -26,7 +26,7 @@ using OptimizationLevel = llvm::PassBuilder::OptimizationLevel;
 #endif
 #endif
 
-#include "Pass.h"
+#include <llvm/Transforms/SymbolicCompiler/Pass.h>
 
 using namespace llvm;
 
