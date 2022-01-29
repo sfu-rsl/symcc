@@ -15,7 +15,7 @@
 #include <llvm/ADT/StringSet.h>
 #include <llvm/Config/llvm-config.h>
 #include <llvm/IR/IRBuilder.h>
-#include <llvm/Transforms/Symbolize/Runtime.h>
+#include <llvm/Transforms/SymbolicCompiler/Runtime.h>
 
 using namespace llvm;
 
