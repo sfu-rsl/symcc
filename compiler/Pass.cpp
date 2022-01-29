@@ -18,9 +18,9 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
-#include <llvm/Transforms/Symbolize/Pass.h>
-#include <llvm/Transforms/Symbolize/Runtime.h>
-#include <llvm/Transforms/Symbolize/Symbolizer.h>
+#include <llvm/Transforms/SymbolicCompiler/Pass.h>
+#include <llvm/Transforms/SymbolicCompiler/Runtime.h>
+#include <llvm/Transforms/SymbolicCompiler/Symbolizer.h>
 
 using namespace llvm;
 
