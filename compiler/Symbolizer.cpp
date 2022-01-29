@@ -18,8 +18,8 @@
 #include <llvm/IR/GetElementPtrTypeIterator.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
-#include <llvm/Transforms/Symbolize/Runtime.h>
-#include <llvm/Transforms/Symbolize/Symbolizer.h>
+#include <llvm/Transforms/SymbolicCompiler/Runtime.h>
+#include <llvm/Transforms/SymbolicCompiler/Symbolizer.h>
 
 using namespace llvm;
 
