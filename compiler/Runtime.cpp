@@ -155,7 +155,7 @@ Runtime::Runtime(Module &M) {
 }
 
 /// Decide whether a function is called symbolically.
-bool isInterceptedFunction(const Function &f) {
+bool llvm::isInterceptedFunction(const Function &f) {
   static const StringSet<> kInterceptedFunctions = {
       "malloc",  "calloc",  "mmap",   "mmap64",   "open",    "open64", "read",
       "lseek",   "lseek64", "fopen",  "fopen64",  "fread",   "fgets",
