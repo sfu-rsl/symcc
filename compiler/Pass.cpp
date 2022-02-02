@@ -33,6 +33,13 @@ using namespace llvm;
 #define DEBUG(X) ((void)0)
 #endif
 
+namespace {
+
+static constexpr char kSymCtorName[] = "__sym_ctor";
+static constexpr char kSymDtorName[] = "__sym_dtor";
+
+}
+
 char SymbolizePass::ID = 0;
 
 bool SymbolizePass::doInitialization(Module &M) {
