@@ -198,7 +198,7 @@ Runtime::Runtime(Module &M) {
 }
 
 /// Decide whether a function is called symbolically.
-bool isInterceptedFunction(const Function &f) {
+bool llvm::isInterceptedFunction(const Function &f) {
   static const StringSet<> kInterceptedFunctions = {
     // safe to run models instead of the actual user implementation
 #if 1
