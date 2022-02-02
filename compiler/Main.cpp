@@ -18,11 +18,11 @@
 
 void addSymbolizePass(const llvm::PassManagerBuilder & /* unused */,
                       llvm::legacy::PassManagerBase &PM) {
-  PM.add(new SymbolizePass());
+  PM.add(new llvm::SymbolizePass());
 }
 
 // Make the pass known to opt.
-static llvm::RegisterPass<SymbolizePass> X("symbolize", "Symbolization Pass");
+static llvm::RegisterPass<llvm::SymbolizePass> X("symbolize", "Symbolization Pass");
 // Tell frontends to run the pass automatically.
 static struct llvm::RegisterStandardPasses
     Y(llvm::PassManagerBuilder::EP_VectorizerStart, addSymbolizePass);
