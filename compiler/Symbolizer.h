@@ -12,8 +12,8 @@
 // You should have received a copy of the GNU General Public License along with
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-#ifndef SYMBOLIZE_H
-#define SYMBOLIZE_H
+#ifndef LLVM_TRANSFORMS_SYMBOLICCOMPILER_SYMBOLIZE_H
+#define LLVM_TRANSFORMS_SYMBOLICCOMPILER_SYMBOLIZE_H
 
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/IRBuilder.h>
@@ -22,6 +22,8 @@
 #include <llvm/Support/raw_ostream.h>
 
 #include "Runtime.h"
+
+namespace llvm {
 
 class Symbolizer : public llvm::InstVisitor<Symbolizer> {
 public:
@@ -339,5 +341,7 @@ private:
   /// and insert the fast path later.
   std::vector<SymbolicComputation> expressionUses;
 };
+
+}
 
 #endif
