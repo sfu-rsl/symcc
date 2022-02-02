@@ -12,8 +12,8 @@
 // You should have received a copy of the GNU General Public License along with
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-#ifndef PASS_H
-#define PASS_H
+#ifndef LLVM_TRANSFORMS_SYMBOLICCOMPILER_PASS_H
+#define LLVM_TRANSFORMS_SYMBOLICCOMPILER_PASS_H
 
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/ValueMap.h>
@@ -22,6 +22,8 @@
 #if LLVM_VERSION_MAJOR >= 13
 #include <llvm/IR/PassManager.h>
 #endif
+
+namespace llvm {
 
 class SymbolizeLegacyPass : public llvm::FunctionPass {
 public:
@@ -45,5 +47,7 @@ public:
 };
 
 #endif
+
+}
 
 #endif

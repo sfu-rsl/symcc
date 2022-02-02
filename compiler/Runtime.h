@@ -12,8 +12,8 @@
 // You should have received a copy of the GNU General Public License along with
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-#ifndef RUNTIME_H
-#define RUNTIME_H
+#ifndef LLVM_TRANSFORMS_SYMBOLICCOMPILER_RUNTIME_H
+#define LLVM_TRANSFORMS_SYMBOLICCOMPILER_RUNTIME_H
 
 #include <llvm/IR/InstrTypes.h>
 #include <llvm/IR/Module.h>
@@ -23,6 +23,8 @@ using SymFnT = llvm::Value *;
 #else
 using SymFnT = llvm::FunctionCallee;
 #endif
+
+namespace llvm {
 
 /// Runtime functions
 struct Runtime {
@@ -78,5 +80,7 @@ struct Runtime {
 };
 
 bool isInterceptedFunction(const llvm::Function &f);
+
+}
 
 #endif
