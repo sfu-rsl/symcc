@@ -153,6 +153,7 @@ void _sym_initialize(void) {
   } else {
     g_log = fopen(g_config.logFile.c_str(), "w");
   }
+  std::cerr << "_sym_initialize EXIT" << std::endl;
 }
 
 Z3_ast _sym_build_integer(uint64_t value, uint8_t bits) {
@@ -415,8 +416,11 @@ Z3_ast _sym_build_bool_to_bits(Z3_ast expr, uint8_t bits) {
 
 void _sym_push_path_constraint(Z3_ast constraint, int taken,
                                uintptr_t site_id [[maybe_unused]]) {
-  if (constraint == nullptr)
+  std::cerr << "_sym_push_path_constraint 111111111 (" << site_id << ") <<<" << std::endl;
+  if (constraint == nullptr) {
+    std::cerr << "                                       >>> 0" << std::endl;
     return;
+  }
 
   constraint = Z3_simplify(g_context, constraint);
   Z3_inc_ref(g_context, constraint);
@@ -428,12 +432,14 @@ void _sym_push_path_constraint(Z3_ast constraint, int taken,
   if (Z3_is_eq_ast(g_context, constraint, Z3_mk_true(g_context))) {
     assert(taken && "We have taken an impossible branch");
     Z3_dec_ref(g_context, constraint);
+    std::cerr << "                                       >>> 1(T)" << std::endl;
     return;
   }
 
   if (Z3_is_eq_ast(g_context, constraint, Z3_mk_false(g_context))) {
     assert(!taken && "We have taken an impossible branch");
     Z3_dec_ref(g_context, constraint);
+    std::cerr << "                                       >>> 1(F)" << std::endl;
     return;
   }
 
@@ -469,6 +475,7 @@ void _sym_push_path_constraint(Z3_ast constraint, int taken,
          "Asserting infeasible path constraint");
   Z3_dec_ref(g_context, constraint);
   Z3_dec_ref(g_context, not_constraint);
+  std::cerr << "                                       >>> 1" << std::endl;
 }
 
 SymExpr _sym_concat_helper(SymExpr a, SymExpr b) {

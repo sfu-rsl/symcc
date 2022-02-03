@@ -23,6 +23,8 @@
 
 #include "Runtime.h"
 
+#define DEBUG_SITE_ID
+
 class Symbolizer : public llvm::InstVisitor<Symbolizer> {
 public:
   explicit Symbolizer(llvm::Module &M)
@@ -287,9 +289,14 @@ private:
   ///
   /// 2. Pragmatism: Changing the backend to accept and process 64-bit values
   /// would require modifying code that we don't control (in the case of Qsym).
-  llvm::ConstantInt *getTargetPreferredInt(void *pointer) {
+  llvm::ConstantInt *getTargetPreferredInt(void *pointer [[maybe_unused]]) {
+    #ifdef DEBUG_SITE_ID
+    return llvm::ConstantInt::get(intPtrType,
+                                  1);
+    #else
     return llvm::ConstantInt::get(intPtrType,
                                   reinterpret_cast<uint64_t>(pointer));
+    #endif
   }
 
   const Runtime runtime;

@@ -176,6 +176,7 @@ void _sym_initialize(void) {
       new Solver(inputFileName, g_config.outputDir, g_config.aflCoverageMap);
   g_expr_builder = g_config.pruning ? PruneExprBuilder::create()
                                     : SymbolicExprBuilder::create();
+  std::cerr << "_sym_initialize EXIT" << std::endl;
 }
 
 SymExpr _sym_build_integer(uint64_t value, uint8_t bits) {
@@ -283,10 +284,14 @@ SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits) {
 
 void _sym_push_path_constraint(SymExpr constraint, int taken,
                                uintptr_t site_id) {
-  if (constraint == nullptr)
+  std::cerr << "_sym_push_path_constraint 222222222 (" << site_id << ") <<<" << std::endl;
+  if (constraint == nullptr) {
+    std::cerr << "                                       >>> 0" << std::endl;
     return;
+  }
 
   g_solver->addJcc(allocatedExpressions.at(constraint), taken != 0, site_id);
+  std::cerr << "                                       >>> 1" << std::endl;
 }
 
 SymExpr _sym_get_input_byte(size_t offset) {
