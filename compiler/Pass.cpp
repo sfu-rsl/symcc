@@ -23,7 +23,7 @@
 #include "llvm/Transforms/SymbolicCompiler/Symbolizer.h"
 
 using namespace llvm;
-
+#undef NDEBUG
 #ifndef NDEBUG
 #define DEBUG(X)                                                               \
   do {                                                                         \
