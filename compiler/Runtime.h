@@ -15,8 +15,8 @@
 #ifndef LLVM_TRANSFORMS_SYMBOLICCOMPILER_RUNTIME_H
 #define LLVM_TRANSFORMS_SYMBOLICCOMPILER_RUNTIME_H
 
-#include <llvm/IR/InstrTypes.h>
-#include <llvm/IR/Module.h>
+#include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/Module.h"
 
 namespace llvm {
 
