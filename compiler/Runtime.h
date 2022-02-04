@@ -15,8 +15,8 @@
 #ifndef LLVM_TRANSFORMS_SYMBOLICCOMPILER_RUNTIME_H
 #define LLVM_TRANSFORMS_SYMBOLICCOMPILER_RUNTIME_H
 
-#include <llvm/IR/InstrTypes.h>
-#include <llvm/IR/Module.h>
+#include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/Module.h"
 
 #if LLVM_VERSION_MAJOR >= 9 && LLVM_VERSION_MAJOR < 11
 using SymFnT = llvm::Value *;

@@ -15,11 +15,11 @@
 #ifndef LLVM_TRANSFORMS_SYMBOLICCOMPILER_SYMBOLIZE_H
 #define LLVM_TRANSFORMS_SYMBOLICCOMPILER_SYMBOLIZE_H
 
-#include <llvm/IR/BasicBlock.h>
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/InstVisitor.h>
-#include <llvm/IR/ValueMap.h>
-#include <llvm/Support/raw_ostream.h>
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/InstVisitor.h"
+#include "llvm/IR/ValueMap.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "Runtime.h"
 
