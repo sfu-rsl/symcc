@@ -12,21 +12,21 @@
 // You should have received a copy of the GNU General Public License along with
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-#include <llvm/IR/LegacyPassManager.h>
-#include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
 
 #if LLVM_VERSION_MAJOR >= 13
-#include <llvm/Passes/PassBuilder.h>
-#include <llvm/Passes/PassPlugin.h>
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Passes/PassPlugin.h"
 
 #if LLVM_VERSION_MAJOR >= 14
-#include <llvm/Passes/OptimizationLevel.h>
+#include "llvm/Passes/OptimizationLevel.h"
 #else
 using OptimizationLevel = llvm::PassBuilder::OptimizationLevel;
 #endif
 #endif
 
-#include <llvm/Transforms/SymbolicCompiler/Pass.h>
+#include "llvm/Transforms/SymbolicCompiler/Pass.h"
 
 using namespace llvm;
 

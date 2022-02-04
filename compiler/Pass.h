@@ -15,12 +15,12 @@
 #ifndef LLVM_TRANSFORMS_SYMBOLICCOMPILER_PASS_H
 #define LLVM_TRANSFORMS_SYMBOLICCOMPILER_PASS_H
 
-#include <llvm/IR/GlobalVariable.h>
-#include <llvm/IR/ValueMap.h>
-#include <llvm/Pass.h>
+#include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/ValueMap.h"
+#include "llvm/Pass.h"
 
 #if LLVM_VERSION_MAJOR >= 13
-#include <llvm/IR/PassManager.h>
+#include "llvm/IR/PassManager.h"
 #endif
 
 namespace llvm {
