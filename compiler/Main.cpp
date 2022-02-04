@@ -12,9 +12,9 @@
 // You should have received a copy of the GNU General Public License along with
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-#include <llvm/IR/LegacyPassManager.h>
-#include <llvm/Transforms/IPO/PassManagerBuilder.h>
-#include <llvm/Transforms/SymbolicCompiler/Pass.h>
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/Transforms/SymbolicCompiler/Pass.h"
 
 void addSymbolizePass(const llvm::PassManagerBuilder & /* unused */,
                       llvm::legacy::PassManagerBase &PM) {
