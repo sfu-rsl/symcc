@@ -18,7 +18,7 @@
 
 void addSymbolizePass(const llvm::PassManagerBuilder & /* unused */,
                       llvm::legacy::PassManagerBase &PM) {
-  PM.add(new llvm::SymbolizePass());
+  PM.add(llvm::createSymbolizePass());
 }
 
 // Make the pass known to opt.
