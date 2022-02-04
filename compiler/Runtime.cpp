@@ -12,10 +12,10 @@
 // You should have received a copy of the GNU General Public License along with
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
-#include <llvm/ADT/StringSet.h>
-#include <llvm/Config/llvm-config.h>
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/Transforms/SymbolicCompiler/Runtime.h>
+#include "llvm/ADT/StringSet.h"
+#include "llvm/Config/llvm-config.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/Transforms/SymbolicCompiler/Runtime.h"
 
 using namespace llvm;
 
