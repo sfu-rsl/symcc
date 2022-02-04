@@ -29,7 +29,7 @@ class SymbolizeLegacyPass : public llvm::FunctionPass {
 public:
   static char ID;
 
-  SymbolizeLegacyPass() : FunctionPass(ID) {}
+  SymbolizeLegacyPass();
 
   bool doInitialization(llvm::Module &M) override;
   bool runOnFunction(llvm::Function &F) override;
@@ -48,6 +48,7 @@ public:
 
 #endif
 
+FunctionPass *createSymbolizeLegacyPass();
 }
 
 #endif

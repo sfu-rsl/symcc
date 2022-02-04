@@ -13,10 +13,13 @@
 // SymCC. If not, see <https://www.gnu.org/licenses/>.
 
 
+#include "llvm-c/Initialization.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/InstIterator.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/InitializePasses.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 #include "llvm/Transforms/SymbolicCompiler/Pass.h"
 #include "llvm/Transforms/SymbolicCompiler/Runtime.h"
@@ -32,8 +35,6 @@ using namespace llvm;
 #else
 #define DEBUG(X) ((void)0)
 #endif
-
-char SymbolizeLegacyPass::ID = 0;
 
 namespace {
 
@@ -114,3 +115,29 @@ PreservedAnalyses SymbolizePass::run(Module &M, ModuleAnalysisManager &) {
 }
 
 #endif
+
+char SymbolizeLegacyPass::ID = 0;
+
+SymbolizePass::SymbolizePass() : FunctionPass(ID) {
+    initializeSymbolizePassPass(*PassRegistry::getPassRegistry());
+}
+
+INITIALIZE_PASS(SymbolizePass, "symcc",
+                "Efficient Compiler-Based Symbolic Execution", false, false)
+
+// Initialization Routines
+void llvm::initializeSymbolicCompiler(PassRegistry &Registry) {
+  initializeSymbolizePassPass(Registry);
+}
+
+void LLVMInitializeSymbolicCompiler(LLVMPassRegistryRef R) {
+  initializeSymbolizePassPass(*unwrap(R));
+}
+
+FunctionPass *llvm::createSymbolizeLegacyPass() {
+  return new SymbolizePass();
+}
+
+void LLVMAddSymbolizePass(LLVMPassManagerRef PM) {
+  unwrap(PM)->add(createSymbolizePass());
+}
