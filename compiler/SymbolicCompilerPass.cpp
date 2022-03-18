@@ -18,9 +18,9 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
-#include "llvm/Transforms/SymbolicCompiler/Pass.h"
-#include "llvm/Transforms/SymbolicCompiler/Runtime.h"
-#include "llvm/Transforms/SymbolicCompiler/Symbolizer.h"
+#include "llvm/Transforms/Utils/SymbolicCompilerPass.h"
+#include "llvm/Transforms/Utils/SymbolicCompilerRuntime.h"
+#include "llvm/Transforms/Utils/SymbolicCompilerSymbolizer.h"
 
 using namespace llvm;
 #undef NDEBUG
