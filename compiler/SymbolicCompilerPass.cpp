@@ -15,8 +15,10 @@
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/InstIterator.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/InitializePasses.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 #include "llvm/Transforms/Utils/SymbolicCompilerPass.h"
 #include "llvm/Transforms/Utils/SymbolicCompilerRuntime.h"
@@ -38,8 +40,6 @@ namespace {
 static constexpr char kSymCtorName[] = "__sym_ctor";
 
 }
-
-char SymbolizePass::ID = 0;
 
 bool SymbolizePass::doInitialization(Module &M) {
   DEBUG(errs() << "Symbolizer module init\n");
@@ -91,4 +91,21 @@ bool SymbolizePass::runOnFunction(Function &F) {
          "SymbolizePass produced invalid bitcode");
 
   return true;
+}
+
+char SymbolizePass::ID = 0;
+
+SymbolizePass::SymbolizePass() : FunctionPass(ID) {
+    initializeSymbolizePassPass(*PassRegistry::getPassRegistry());
+}
+
+INITIALIZE_PASS(SymbolizePass, "symcc",
+                "Efficient Compiler-Based Symbolic Execution", false, false)
+
+FunctionPass *llvm::createSymbolizePass() {
+  return new SymbolizePass();
+}
+
+void LLVMAddSymbolizePass(LLVMPassManagerRef PM) {
+  unwrap(PM)->add(createSymbolizePass());
 }
