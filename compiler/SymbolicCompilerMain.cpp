@@ -14,7 +14,7 @@
 
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
-#include "llvm/Transforms/SymbolicCompiler/Pass.h"
+#include "llvm/Transforms/Utils/SymbolicCompilerPass.h"
 
 #if LLVM_VERSION_MAJOR >= 9 && LLVM_VERSION_MAJOR <= 12
 
