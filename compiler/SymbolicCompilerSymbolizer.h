@@ -21,7 +21,7 @@
 #include "llvm/IR/ValueMap.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "Runtime.h"
+#include "SymbolicCompilerRuntime.h"
 
 namespace llvm {
 
