@@ -36,7 +36,7 @@ using namespace llvm;
 
 void addSymbolizeLegacyPass(const PassManagerBuilder & /* unused */,
                             legacy::PassManagerBase &PM) {
-  PM.add(new SymbolizeLegacyPass());
+  PM.add(createSymbolizeLegacyPass());
 }
 
 // Make the pass known to opt.
