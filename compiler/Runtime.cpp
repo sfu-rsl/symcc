@@ -210,9 +210,9 @@ bool isInterceptedFunction(const Function &f) {
     // these are not safe (e.g., they allocate blocks) to run
     // natively. We must handle them during emulation.
     /*
-      "malloc",   "calloc",  "mmap",    "mmap64", "open",   "read",    "lseek",
-      "lseek64",  "fopen",   "fopen64", "fread",  "fseek",  "fseeko",  "rewind",
-      "fseeko64", "getc",    "ungetc", "fgets",  "fgetc"
+      "malloc", "calloc",   "mmap",  "mmap64",  "open",  "open64", "read",
+      "lseek",  "lseek64",  "fopen", "fopen64", "fread", "fseek",  "fseeko",
+      "rewind", "fseeko64", "getc",  "ungetc",  "fgets", "fgetc"
     */
   };
 
