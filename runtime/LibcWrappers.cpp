@@ -130,6 +130,29 @@ int SYM(open)(const char *path, int oflag, mode_t mode) {
   return result;
 }
 
+int SYM(open64)(const char *path, int oflag, mode_t mode) {
+  auto result = open64(path, oflag, mode);
+  _sym_set_return_expression(nullptr);
+
+  if (result >= 0 && !g_config.fullyConcrete && !g_config.inputFile.empty() &&
+      strstr(path, g_config.inputFile.c_str()) != nullptr) {
+    if (inputFileDescriptor != -1)
+    {
+#if 0
+      std::cerr << "Warning: input file opened multiple times; this is not yet "
+                   "supported"
+                << std::endl;
+#endif
+      // we have already done internally the open()
+      // assert(inputOffset == 0 && inputFileDescriptor == result);
+    }
+    inputFileDescriptor = result;
+    inputOffset = 0;
+  }
+
+  return result;
+}
+
 ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
   tryAlternative(buf, _sym_get_parameter_expression(1), _sym_get_call_site());
   tryAlternative(nbyte, _sym_get_parameter_expression(2), _sym_get_call_site());
