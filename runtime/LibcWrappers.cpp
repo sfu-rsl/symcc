@@ -134,6 +134,16 @@ int SYM(open)(const char *path, int oflag, mode_t mode) {
   return result;
 }
 
+int SYM(open64)(const char *path, int oflag, mode_t mode) {
+  auto result = open64(path, oflag, mode);
+  _sym_set_return_expression(nullptr);
+
+  if (result >= 0)
+    maybeSetInputFile(path, result);
+
+  return result;
+}
+
 ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
   tryAlternative(buf, _sym_get_parameter_expression(1), SYM(read));
   tryAlternative(nbyte, _sym_get_parameter_expression(2), SYM(read));
