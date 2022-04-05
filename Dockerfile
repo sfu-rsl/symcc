@@ -48,6 +48,7 @@ RUN git clone -b llvmorg-10.0.1 --depth 1 https://github.com/llvm/llvm-project.g
 COPY . /symcc_source
 WORKDIR /symcc_build_simple
 RUN cmake -G Ninja \
+        -DLLVM_VERSION_FORCE=10 \
         -DQSYM_BACKEND=OFF \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
         -DZ3_TRUST_SYSTEM_VERSION=on \
@@ -57,6 +58,7 @@ RUN cmake -G Ninja \
 # Build SymCC with the Qsym backend
 WORKDIR /symcc_build
 RUN cmake -G Ninja \
+        -DLLVM_VERSION_FORCE=10 \
         -DQSYM_BACKEND=ON \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
         -DZ3_TRUST_SYSTEM_VERSION=on \
