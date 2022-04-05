@@ -91,7 +91,7 @@ if (${TARGET_32BIT})
   set(SYM_RUNTIME_32BIT_DIR ${BINARY_DIR})
 endif()
 
-find_package(LLVM 10.0.0 EXACT REQUIRED CONFIG)
+find_package(LLVM ${LLVM_VERSION_FORCE} REQUIRED CONFIG)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake from ${LLVM_DIR}")
