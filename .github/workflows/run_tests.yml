@@ -7,8 +7,10 @@ jobs:
       - uses: actions/checkout@v2
       - name: Setup docker compilation environment
         run: docker build --target builder_base  -t symcc .
-      - name: Setup source environment
+      - name: Setup SymCC source
         run: docker build --target builder_source  -t symcc .
+      - name: Setup SymCC dependencies
+        run: docker build --target builder_depend  -t symcc .
       - name: Build and test SymCC with simple backend
         run: docker build --target builder_simple  -t symcc .
       - name: Build libcxx using SymCC simple backend
