@@ -31,9 +31,29 @@ WORKDIR $HOME
 
 
 #
-# Retrieve all source
+# Prepare SymCC source
 #
 FROM builder_base AS builder_source
+
+RUN sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        git
+
+COPY --chown=ubuntu:ubuntu . symcc_source
+
+# Init submodules if they are not initialiazed yet
+WORKDIR $HOME/symcc_source
+RUN if git submodule status | grep "^-">/dev/null ; then \
+    echo "Initializing submodules"; \
+    git submodule init; \
+    git submodule update; \
+    fi
+WORKDIR $HOME
+
+
+#
+# Prepare SymCC dependencies
+#
+FROM builder_source AS builder_depend
 
 # Install dependencies
 RUN sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -41,7 +61,6 @@ RUN sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
         clang-10 \
         cmake \
         g++ \
-        git \
         libz3-dev \
         llvm-10-dev \
         llvm-10-tools \
@@ -61,23 +80,11 @@ RUN git clone -b v2.56b https://github.com/google/AFL.git afl \
 # SymCC changes
 RUN git clone -b llvmorg-10.0.1 --depth 1 https://github.com/llvm/llvm-project.git llvm_source
 
-# Build a version of SymCC with the simple backend to compile libc++
-COPY --chown=ubuntu:ubuntu . symcc_source
-
-# Init submodules if they are not initialiazed yet
-WORKDIR $HOME/symcc_source
-RUN if git submodule status | grep "^-">/dev/null ; then \
-    echo "Initializing submodules"; \
-    git submodule init; \
-    git submodule update; \
-    fi
-WORKDIR $HOME
-
 
 #
 # Build SymCC with the simple backend
 #
-FROM builder_source AS builder_simple
+FROM builder_depend AS builder_simple
 RUN mkdir symcc_build_simple \
     && cd symcc_build_simple \
     && cmake -G Ninja ~/symcc_source \
@@ -125,7 +132,7 @@ RUN mkdir symcc_build \
 #
 # The final image
 #
-FROM builder_base
+FROM builder_source
 
 RUN sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
         build-essential \
@@ -136,7 +143,7 @@ RUN sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
 
 COPY --chown=ubuntu:ubuntu --from=builder_qsym $HOME/symcc_build symcc_build
 COPY --chown=ubuntu:ubuntu --from=builder_qsym $HOME/.cargo/bin/symcc_fuzzing_helper symcc_build/
-COPY --chown=ubuntu:ubuntu util/pure_concolic_execution.sh symcc_build/
+RUN ln -s ~/symcc_source/util/pure_concolic_execution.sh symcc_build
 COPY --chown=ubuntu:ubuntu --from=builder_qsym $HOME/libcxx_symcc_install libcxx_symcc_install
 COPY --chown=ubuntu:ubuntu --from=builder_qsym $HOME/afl afl
 
@@ -146,5 +153,5 @@ ENV AFL_CC clang-10
 ENV AFL_CXX clang++-10
 ENV SYMCC_LIBCXX_PATH=$HOME/libcxx_symcc_install
 
-COPY --chown=ubuntu:ubuntu sample.cpp $HOME/
+RUN ln -s ~/symcc_source/sample.cpp
 RUN mkdir /tmp/output
