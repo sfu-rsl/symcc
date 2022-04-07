@@ -73,7 +73,6 @@ RUN cmake -G Ninja \
 # Build libc++ with SymCC using the simple backend
 #
 FROM builder_simple AS builder_libcxx
-WORKDIR /libcxx_symcc
 RUN export SYMCC_REGULAR_LIBCXX=yes SYMCC_NO_SYMBOLIC_INPUT=yes \
   && mkdir /libcxx_symcc_build \
   && cd /libcxx_symcc_build \
