@@ -61,12 +61,11 @@ RUN if git submodule status | grep "^-">/dev/null ; then \
 #
 FROM builder AS builder_simple
 WORKDIR /symcc_build_simple
-RUN cmake -G Ninja \
+RUN cmake -G Ninja /symcc_source \
         -DLLVM_VERSION_FORCE=10 \
         -DQSYM_BACKEND=OFF \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
         -DZ3_TRUST_SYSTEM_VERSION=on \
-        /symcc_source \
     && ninja check
 
 #
@@ -93,12 +92,11 @@ RUN export SYMCC_REGULAR_LIBCXX=yes SYMCC_NO_SYMBOLIC_INPUT=yes \
 #
 FROM builder_libcxx AS builder_qsym
 WORKDIR /symcc_build
-RUN cmake -G Ninja \
+RUN cmake -G Ninja /symcc_source \
         -DLLVM_VERSION_FORCE=10 \
         -DQSYM_BACKEND=ON \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
         -DZ3_TRUST_SYSTEM_VERSION=on \
-        /symcc_source \
     && ninja check \
     && cargo install --path /symcc_source/util/symcc_fuzzing_helper
 
