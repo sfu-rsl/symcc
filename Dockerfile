@@ -36,6 +36,8 @@ WORKDIR $HOME
 FROM builder_base AS builder_source
 
 RUN sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        clang-10 \
+        g++ \
         git
 
 COPY --chown=ubuntu:ubuntu . symcc_source
@@ -58,9 +60,7 @@ FROM builder_source AS builder_depend
 # Install dependencies
 RUN sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
         cargo \
-        clang-10 \
         cmake \
-        g++ \
         libz3-dev \
         llvm-10-dev \
         llvm-10-tools \
@@ -136,8 +136,6 @@ FROM builder_source
 
 RUN sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
         build-essential \
-        clang-10 \
-        g++ \
         libllvm10 \
         zlib1g
 
