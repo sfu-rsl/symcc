@@ -59,7 +59,6 @@ FROM builder_source AS builder_depend
 
 # Install dependencies
 RUN sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        cargo \
         cmake \
         libz3-dev \
         llvm-10-dev \
@@ -125,8 +124,18 @@ RUN mkdir symcc_build \
         -DQSYM_BACKEND=ON \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
         -DZ3_TRUST_SYSTEM_VERSION=on \
-    && ninja check \
-    && cargo install --path ~/symcc_source/util/symcc_fuzzing_helper
+    && ninja check
+
+
+#
+# Build SymCC additional tools
+#
+FROM builder_source AS builder_addons
+
+RUN sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        cargo
+
+RUN cargo install --path symcc_source/util/symcc_fuzzing_helper
 
 
 #
@@ -140,7 +149,7 @@ RUN sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
         zlib1g
 
 COPY --chown=ubuntu:ubuntu --from=builder_qsym $HOME/symcc_build symcc_build
-COPY --chown=ubuntu:ubuntu --from=builder_qsym $HOME/.cargo/bin/symcc_fuzzing_helper symcc_build/
+COPY --chown=ubuntu:ubuntu --from=builder_addons $HOME/.cargo/bin/symcc_fuzzing_helper symcc_build/
 RUN ln -s ~/symcc_source/util/pure_concolic_execution.sh symcc_build
 COPY --chown=ubuntu:ubuntu --from=builder_qsym $HOME/libcxx_symcc_install libcxx_symcc_install
 COPY --chown=ubuntu:ubuntu --from=builder_qsym $HOME/afl afl
