@@ -60,7 +60,6 @@ struct Runtime {
   SymFnT memmove{};
   SymFnT readMemory{};
   SymFnT writeMemory{};
-  SymFnT buildInsert{};
   SymFnT buildExtract{};
   SymFnT notifyCall{};
   SymFnT notifyRet{};
