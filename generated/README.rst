@@ -9,4 +9,4 @@ This forked SymCC repository is used as a submodule component of
 SymRustC. More information can be found by consulting its main
 repository page:
 
-- \ `https://github.com/sfu-rsl/belcarra_symrustc <https://github.com/sfu-rsl/belcarra_symrustc>`_
+- \ `https://github.com/sfu-rsl/symrustc <https://github.com/sfu-rsl/symrustc>`_
