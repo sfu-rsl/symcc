@@ -43,13 +43,13 @@ using namespace llvm;
 //-----------------------------------------------------------------------------
 // New PM Registration
 //-----------------------------------------------------------------------------
-llvm::PassPluginLibraryInfo getSymccPluginInfo() {
+PassPluginLibraryInfo getSymccPluginInfo() {
   return {LLVM_PLUGIN_API_VERSION, "Symcc", LLVM_VERSION_STRING,
           [](PassBuilder &PB) {
             //errs() << "registerPipelineStartEPCallback" << "\n";
             //PB = PB;
             PB.registerPipelineStartEPCallback(
-              [](ModulePassManager &MPM, PassBuilder::OptimizationLevel Level) {
+              [](ModulePassManager &MPM, OptimizationLevel Level) {
                  FunctionPassManager FPM;
                  Level = Level; //hack for now
                  MPM.addPass(SymbolizePass());
@@ -61,7 +61,7 @@ llvm::PassPluginLibraryInfo getSymccPluginInfo() {
 // This is the core interface for pass plugins. It guarantees that 'opt' will
 // be able to recognize SEP when added to the pass pipeline on the
 // command line, i.e. via '-passes=hello-world'
-extern "C" LLVM_ATTRIBUTE_WEAK ::llvm::PassPluginLibraryInfo
+extern "C" LLVM_ATTRIBUTE_WEAK ::PassPluginLibraryInfo
 llvmGetPassPluginInfo() {
   return getSymccPluginInfo();
 }
