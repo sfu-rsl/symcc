@@ -20,7 +20,7 @@ endif()
 
 configure_file("lit.site.cfg.in" "lit.site.cfg")
 
-add_custom_target(check
+add_custom_target(check-test-symcc
   lit
   --verbose
   --path=${LLVM_TOOLS_BINARY_DIR}
@@ -28,7 +28,7 @@ add_custom_target(check
   COMMENT "Testing the system..."
   USES_TERMINAL)
 
-add_dependencies(check SymRuntime Symbolize)
+add_dependencies(check-test-symcc SymRuntime Symbolize)
 if (TARGET SymRuntime32)
-  add_dependencies(check SymRuntime32)
+  add_dependencies(check-test-symcc SymRuntime32)
 endif()
