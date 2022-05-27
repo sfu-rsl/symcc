@@ -18,6 +18,21 @@ project(SymbolicCompiler)
 option(QSYM_BACKEND "Use the Qsym backend instead of our own" OFF)
 option(TARGET_32BIT "Make the compiler work correctly with -m32" OFF)
 
+if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  message (WARNING "It seems you want to build Symcc as a standalone project here,
+                    we suggest you not to do so in this repo.")
+endif(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+
+
+
+get_property(SYMCC_INCLUDE DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
+foreach(dir ${SYMCC_INCLUDE})
+  message(STATUS "included directory for SymCC='${dir}'")
+endforeach()
+
+
+set (LLVM_SYMCC_DIR "${CMAKE_SOURCE_DIR}/cmake")
+
 # We need to build the runtime as an external project because CMake otherwise
 # doesn't allow us to build it twice with different options (one 32-bit version
 # and one 64-bit variant).
@@ -34,12 +49,12 @@ set(SYM_RUNTIME_BUILD_ARGS
   -DZ3_TRUST_SYSTEM_VERSION=${Z3_TRUST_SYSTEM_VERSION})
 
 ExternalProject_Add(SymRuntime
-  SOURCE_DIR ${CMAKE_SOURCE_DIR}/runtime
+  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/runtime
   CMAKE_ARGS
   ${SYM_RUNTIME_BUILD_ARGS}
   -DCMAKE_EXPORT_COMPILE_COMMANDS=${CMAKE_EXPORT_COMPILE_COMMANDS}
   -DZ3_DIR=${Z3_DIR}
-  -DLLVM_DIR=${LLVM_DIR}
+  -DLLVM_DIR=${LLVM_SYMCC_DIR}
   INSTALL_COMMAND ""
   BUILD_ALWAYS TRUE)
 
@@ -62,10 +77,11 @@ if (${TARGET_32BIT})
   set(SYM_RUNTIME_32BIT_DIR ${BINARY_DIR})
 endif()
 
-find_package(LLVM ${LLVM_VERSION_FORCE} REQUIRED CONFIG)
+#find_package(LLVM ${LLVM_VERSION_FORCE} REQUIRED CONFIG)
+
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake from ${LLVM_DIR}")
+message(STATUS "Using LLVMConfig.cmake from ${LLVM_SYMCC_DIR}")
 
 if (${LLVM_VERSION_MAJOR} LESS 8 OR ${LLVM_VERSION_MAJOR} GREATER 10)
   message(WARNING "The software has been developed for LLVM 8, 9 and 10; \
@@ -73,12 +89,16 @@ it is unlikely to work with other versions!")
 endif()
 
 add_definitions(${LLVM_DEFINITIONS})
-include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
+#include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 
+
+# The flags that I have removed from the original SymCC version are:
+# -Wswitch-default
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 \
--Wredundant-decls -Wcast-align -Wmissing-include-dirs -Wswitch-default \
+-Wredundant-decls -Wcast-align -Wmissing-include-dirs  \
 -Wextra -Wall -Winvalid-pch -Wredundant-decls -Wformat=2 \
 -Wmissing-format-attribute -Wformat-nonliteral -Werror")
+
 
 # Mark nodelete to work around unload bug in upstream LLVM 5.0+
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,nodelete")
@@ -102,7 +122,7 @@ find_program(CLANGPP_BINARY "clang++"
   HINTS ${LLVM_TOOLS_BINARY_DIR}
   DOC "The clang binary to use in the sym++ wrapper script.")
 if (NOT CLANG_BINARY)
-  message(FATAL_ERROR "Clang not found; please make sure that the version corresponding to your LLVM installation is available.")
+  message(WARNING "Clang not found; make sure it is going to be built before Symcc")
 endif()
 
 configure_file("compiler/symcc.in" "symcc" @ONLY)
