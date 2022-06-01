@@ -19,11 +19,10 @@ option(QSYM_BACKEND "Use the Qsym backend instead of our own" OFF)
 option(TARGET_32BIT "Make the compiler work correctly with -m32" OFF)
 
 if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-  message (WARNING "It seems you want to build Symcc as a standalone project here,
-                    we suggest you not to do so in this repo.")
+  message (WARNING "The build of SymCC as a standalone project may not
+  work in this repo (or may have not yet been implemented and
+  tested).")
 endif(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-
-
 
 get_property(SYMCC_INCLUDE DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
 foreach(dir ${SYMCC_INCLUDE})
@@ -60,7 +59,7 @@ set(SYM_RUNTIME_DIR ${BINARY_DIR})
 
 if (${TARGET_32BIT})
   ExternalProject_Add(SymRuntime32
-    SOURCE_DIR ${CMAKE_SOURCE_DIR}/runtime
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/runtime
     CMAKE_ARGS
     ${SYM_RUNTIME_BUILD_ARGS}
     -DCMAKE_C_FLAGS="-m32"
@@ -87,16 +86,12 @@ it is unlikely to work with other versions!")
 endif()
 
 add_definitions(${LLVM_DEFINITIONS})
-#include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 
-
-# The flags that I have removed from the original SymCC version are:
-# -Wswitch-default
+# Note: "-Wswitch-default" has been removed to prevent the build of llvm to fail
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 \
--Wredundant-decls -Wcast-align -Wmissing-include-dirs  \
+-Wredundant-decls -Wcast-align -Wmissing-include-dirs \
 -Wextra -Wall -Winvalid-pch -Wredundant-decls -Wformat=2 \
 -Wmissing-format-attribute -Wformat-nonliteral -Werror")
-
 
 # Mark nodelete to work around unload bug in upstream LLVM 5.0+
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,nodelete")
@@ -120,7 +115,9 @@ find_program(CLANGPP_BINARY "clang++"
   HINTS ${LLVM_TOOLS_BINARY_DIR}
   DOC "The clang binary to use in the sym++ wrapper script.")
 if (NOT CLANG_BINARY)
-  message(WARNING "Clang not found; make sure it is going to be built before Symcc")
+  message(WARNING "Clang not found, but it is only needed when
+  invoking SymCC. Note that its version must be compatible with the
+  version of this LLVM installation.")
 endif()
 
 configure_file("compiler/symcc.in" "symcc" @ONLY)
