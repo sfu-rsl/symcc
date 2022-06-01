@@ -30,9 +30,6 @@ foreach(dir ${SYMCC_INCLUDE})
   message(STATUS "included directory for SymCC='${dir}'")
 endforeach()
 
-
-set (LLVM_SYMCC_DIR "${CMAKE_SOURCE_DIR}/cmake")
-
 # We need to build the runtime as an external project because CMake otherwise
 # doesn't allow us to build it twice with different options (one 32-bit version
 # and one 64-bit variant).
@@ -73,7 +70,7 @@ ExternalProject_Add(SymRuntime
   ${SYM_RUNTIME_BUILD_ARGS}
   -DCMAKE_EXPORT_COMPILE_COMMANDS=${CMAKE_EXPORT_COMPILE_COMMANDS}
   -DZ3_DIR=${Z3_DIR}
-  -DLLVM_DIR=${LLVM_SYMCC_DIR}
+  -DLLVM_DIR=${LLVM_DIR}
   INSTALL_COMMAND ""
   BUILD_ALWAYS TRUE)
 
@@ -106,11 +103,12 @@ if (${TARGET_32BIT})
   set(SYM_RUNTIME_32BIT_DIR ${BINARY_DIR})
 endif()
 
-#find_package(LLVM ${LLVM_VERSION_FORCE} REQUIRED CONFIG)
-
-
+# TODO: to be removed once the apt-installation of llvm-dev and llvm-tools becomes unnecessary
+find_package(LLVM ${LLVM_VERSION_FORCE} REQUIRED CONFIG)
+# TODO: to be removed (same reason)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake from ${LLVM_SYMCC_DIR}")
+
+message(STATUS "Using LLVMConfig.cmake from ${LLVM_DIR}")
 
 if (${LLVM_VERSION_MAJOR} LESS 8 OR ${LLVM_VERSION_MAJOR} GREATER 11)
   message(WARNING "The software has been developed for LLVM 8 through 11; \
