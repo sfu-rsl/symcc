@@ -129,10 +129,7 @@ set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,nodelete")
 # built without RTTI we have to disable it for our library too, otherwise we'll
 # get linker errors.
 add_library(Symbolize MODULE
-  compiler/Symbolizer.cpp
-  compiler/Pass.cpp
-  compiler/Runtime.cpp
-  compiler/Main.cpp)
+  compiler/SymbolicCompilerMain.cpp)
 if (NOT LLVM_ENABLE_RTTI)
   set_target_properties(Symbolize PROPERTIES COMPILE_FLAGS "-fno-rtti")
 endif()
