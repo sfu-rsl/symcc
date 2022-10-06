@@ -37,12 +37,15 @@ extern "C" {
  * Initialization
  */
 void _sym_initialize(void);
+void _sym_pre_initialize_qemu(void);
 void _sym_initialize_qemu(void);
+void _sym_finalize(void);
 
 /*
  * Construction of simple values
  */
 SymExpr _sym_build_integer(uint64_t value, uint8_t bits);
+SymExpr _sym_build_value_from_memory(uint8_t *addr, size_t length);
 SymExpr _sym_build_integer128(uint64_t high, uint64_t low);
 SymExpr _sym_build_float(double value, int is_double);
 SymExpr _sym_build_null_pointer(void);
@@ -210,6 +213,12 @@ SymExpr _sym_build_ite(SymExpr cond, SymExpr a, SymExpr b);
 SymExpr _sym_build_array_read(void* updateList, SymExpr index);
 void _sym_concretize_memory(uint8_t *addr, size_t length);
 void _sym_print_stack(void);
+
+SymExpr _sym_build_insert(SymExpr target, SymExpr to_insert, uint64_t offset,
+                          bool little_endian);
+
+void _sym_switch_fs_to_native(void);
+void _sym_switch_fs_to_emulation(void);
 
 #ifdef __cplusplus
 }

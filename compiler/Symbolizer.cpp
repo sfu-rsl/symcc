@@ -23,7 +23,9 @@
 
 #include "Runtime.h"
 
-#include "../../symqemu-hybrid/accel/tcg/hybrid/hybrid_debug.h"
+// #include "../../symqemu-hybrid/accel/tcg/hybrid/hybrid_debug.h"
+#define HYBRID_DBG_CONSISTENCY_CHECK 0
+#define DISABLE_MODEELS 0
 
 using namespace llvm;
 
@@ -241,13 +243,14 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
 
     IRB.CreateCall(runtime.setParameterCount,
                     ConstantInt::get(IRB.getInt8Ty(), I.getNumArgOperands()));
-
+#if !DISABLE_MODEELS
     IRB.CreateCall(runtime.LibcMemcpy,
                    {I.getOperand(0),
                     I.getOperand(1),
                     I.getOperand(2)});
 
     I.eraseFromParent();
+#endif
     break;
   }
   case Intrinsic::memset: {
@@ -264,13 +267,14 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
 
     IRB.CreateCall(runtime.setParameterCount,
                     ConstantInt::get(IRB.getInt8Ty(), I.getNumArgOperands()));
-
+#if !DISABLE_MODEELS
     IRB.CreateCall(runtime.LibcMemset,
                    {I.getOperand(0),
                     I.getOperand(1),
                     I.getOperand(2)});
 
     I.eraseFromParent();
+#endif
     break;
   }
   case Intrinsic::memmove: {
@@ -287,13 +291,14 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
 
     IRB.CreateCall(runtime.setParameterCount,
                     ConstantInt::get(IRB.getInt8Ty(), I.getNumArgOperands()));
-
+#if !DISABLE_MODEELS
     IRB.CreateCall(runtime.LibcMemmove,
                    {I.getOperand(0),
                     I.getOperand(1),
                     I.getOperand(2)});
 
     I.eraseFromParent();
+#endif
     break;
   }
   case Intrinsic::stacksave: {
@@ -345,11 +350,19 @@ void Symbolizer::handleIntrinsicCall(CallBase &I) {
     break;
   }
   case Intrinsic::vastart: {
-#if HYBRID_HANDLE_VAR_ARGS
+#if 1 // HYBRID_HANDLE_VAR_ARGS
     IRBuilder<> IRB(&I);
     IRB.SetInsertPoint(I.getNextNode());
     IRB.CreateCall(runtime.vaListStart, I.getOperand(0));
 #endif
+    break;
+  }
+  case Intrinsic::floor: {
+    // this intrinsic is converted into a call
+    IRBuilder<> IRB(&I);
+    IRB.CreateCall(runtime.setParameterCount,
+                    ConstantInt::get(IRB.getInt8Ty(), 0));
+    symbolicExpressions[&I] = nullptr;
     break;
   }
   default:
@@ -376,6 +389,8 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
     return;
   }
 
+  I.addAttribute(AttributeList::FunctionIndex, Attribute::NoBuiltin);
+
   IRBuilder<> IRB(returnPoint);
   IRB.CreateCall(runtime.notifyRet, getTargetPreferredInt(&I));
   IRB.SetInsertPoint(&I);
@@ -393,7 +408,8 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
   if (fun) {
     // errs() << "Function " << fun->getName() << ": " << *retType << '\n';
 
-    if (fun->getName() == "malloc" 
+    if (
+        fun->getName() == "malloc" 
         || fun->getName() == "free" 
         || fun->getName() == "calloc" 
         || fun->getName() == "realloc"
@@ -462,6 +478,15 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
         supported = false;
         break;
       }
+      // struct may be passed by value
+      // LLVM will add them as an additional argument
+      // but then we should ignore them when
+      // dealing with arguments
+      if (I.isByValArgument(arg.getOperandNo())) {
+        errs() << "Argument is passed by value" << *arg << "\n";
+        supported = false;
+        break;
+      }
     }
 
     if (!(
@@ -495,8 +520,6 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
   bool deleteCaller = false;
   if (indirectCall) 
   {
-    // errs() << "\nIndirect call at " << I << "\n";
-    // errs() << "Called operand: " << *I.getCalledOperand() << "\n";
     Value* calledOp = I.getCalledOperand();
 
     for (Use &arg : I.args()) {
@@ -523,13 +546,10 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
     SymFnT fty;
     Value *NewCI;
     if (retType->isVoidTy()) {
-      // printf("HERE 2a\n\n");
       fty = runtime.wrapIndirectCallVoid;
     } else if (retType->isPointerTy()) {
-      // printf("HERE 2b\n\n");
       fty = runtime.wrapIndirectCallPtr;
     } else {
-      // printf("HERE 2c\n\n");
       // printf("Indirect call return size: %d\n\n", retValSize);
       // errs() << "return type is: " << *retType << "\n";
 
@@ -559,11 +579,9 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
       }
     }
 
-    // printf("HERE 2d\n\n");
     NewCI = IRB.CreateCall(fty, {
       IRB.CreateCast(Instruction::CastOps::PtrToInt, calledOp, IRB.getInt64Ty())
     });
-    // printf("HERE 2f\n\n");
 
     if (retType->isPointerTy()) {
       NewCI = IRB.CreateBitCast(NewCI, retType);
@@ -577,7 +595,6 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
   }
 
   if (return_value_is_used) {
-    // printf("HERE 3a\n\n");
     // The result of the function is used somewhere later on. Since we have no
     // way of knowing whether the function is instrumented (and thus sets a
     // proper return expression), we have to account for the possibility that
@@ -591,16 +608,6 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
                     ConstantPointerNull::get(IRB.getInt8PtrTy()));
     }
     IRB.SetInsertPoint(returnPoint);
-#if 0
-    if (fun && fun->getName() == "fread")
-    {
-      // IRB.CreateCall(runtime.printPathConstraints);
-      IRB.CreateCall(runtime.debugFunctionAfterReturn, 
-        // createValueExpression(I.getArgOperand(0), IRB)
-        I.getArgOperand(0)
-      );
-    }
-#endif
     if (fun && (
           fun->getName() == "malloc" 
           || fun->getName() == "free" 
@@ -613,16 +620,6 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
           || fun->getName() == "fopen"
           )) 
     {
-#if 0
-      if (fun->getName() == "fread")
-      {
-        // IRB.CreateCall(runtime.printPathConstraints);
-        IRB.CreateCall(runtime.debugFunctionAfterReturn, 
-          // createValueExpression(I.getArgOperand(0), IRB)
-          I.getArgOperand(0)
-        );
-      }
-#endif
       symbolicExpressions[II] = nullptr;
     } 
     else 
@@ -644,7 +641,6 @@ void Symbolizer::handleFunctionCall(CallBase &I, Instruction *returnPoint) {
         );
       }
 #endif
-      // printf("HERE 3c\n\n");
     }
   }
 
@@ -723,6 +719,12 @@ void Symbolizer::visitSelectInst(SelectInst &I) {
                                        {I.getCondition(), false},
                                        {getTargetPreferredInt(&I), false}});
   registerSymbolicComputation(runtimeCall);
+  
+  auto *data = IRB.CreateSelect(
+    I.getCondition(), 
+    getSymbolicExpressionOrNull(I.getTrueValue()),
+    getSymbolicExpressionOrNull(I.getFalseValue()));
+  symbolicExpressions[&I] = data;
 }
 
 void Symbolizer::visitCmpInst(CmpInst &I) {
@@ -795,13 +797,33 @@ void Symbolizer::visitInvokeInst(InvokeInst &I) {
                             : I.getNormalDest()->getFirstNonPHI());
 }
 
-void Symbolizer::visitAllocaInst(AllocaInst & /*unused*/) {
-  // Nothing to do: the shadow for the newly allocated memory region will be
-  // created on first write; until then, the memory contents are concrete.
+void Symbolizer::visitAllocaInst(AllocaInst &I) {
+  // library code (SSE) may access unintialized memory...
+  Optional<uint64_t> size = I.getAllocationSizeInBits(dataLayout);
+  if (!size.hasValue()) return;
+  IRBuilder<> IRB(&I);
+  IRB.SetInsertPoint(I.getNextNode());
+  IRB.CreateCall(
+    runtime.concretizeMemory,
+    {
+      IRB.CreatePtrToInt(&I, intPtrType),
+      ConstantInt::get(intPtrType, size.getValue() / 8),
+    }
+  );
 }
 
 void Symbolizer::visitLoadInst(LoadInst &I) {
   IRBuilder<> IRB(&I);
+
+  int isTlsData = 0;
+  if (GlobalValue *GV = dyn_cast<GlobalValue>(I.getPointerOperand())) {
+    if (GV->isThreadLocal()) {
+      isTlsData = 1;
+      IRB.CreateCall(
+        runtime.switchFsRegisterToNative, {}
+      );
+    }
+  }
 
   auto *addr = I.getPointerOperand();
 #if 0
@@ -813,7 +835,7 @@ void Symbolizer::visitLoadInst(LoadInst &I) {
       {getSymbolicExpressionOrNull(addr),
        IRB.CreatePtrToInt(addr, intPtrType),
        ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
-       ConstantInt::get(IRB.getInt8Ty(), isLittleEndian(dataType) ? 1 : 0)});
+       ConstantInt::get(IRB.getInt8Ty(), isLittleEndian(dataType) ? (isTlsData << 1) + 1 : (isTlsData << 1) + 0)});
 
   if (dataType->isFloatingPointTy()) {
     data = IRB.CreateCall(runtime.buildBitsToFloat,
@@ -821,6 +843,13 @@ void Symbolizer::visitLoadInst(LoadInst &I) {
   }
 
   symbolicExpressions[&I] = data;
+
+  if (isTlsData) {
+    IRBuilder<> IRB_after(I.getNextNode());
+    IRB_after.CreateCall(
+      runtime.switchFsRegisterToEmulation, {}
+    );
+  }
 }
 
 void Symbolizer::visitStoreInst(StoreInst &I) {
@@ -850,8 +879,7 @@ void Symbolizer::visitStoreInst(StoreInst &I) {
       value = arg;
     else
       unsupportedSize = true;
-  } else {
-
+  } else if (dataType->isStructTy()) {
     unsigned size = dataType->getScalarSizeInBits();
     Type* intType;
     switch (size) {
@@ -871,9 +899,22 @@ void Symbolizer::visitStoreInst(StoreInst &I) {
       if (intType->getScalarSizeInBits() < 64)
         value = IRB.CreateCast(Instruction::CastOps::ZExt, value, IRB.getInt64Ty());
     }
+  } else {
+    unsupportedSize = true;
   }
 
-  if (!unsupportedSize)
+  int isTlsData = 0;
+  if (!unsupportedSize) {
+    
+    if (GlobalValue *GV = dyn_cast<GlobalValue>(I.getPointerOperand())) {
+      if (GV->isThreadLocal()) {
+        isTlsData = 1;
+        IRB.CreateCall(
+          runtime.switchFsRegisterToNative, {}
+        );
+      }
+    }
+
     IRB.CreateCall(
       runtime.writeMemory,
       {
@@ -881,11 +922,11 @@ void Symbolizer::visitStoreInst(StoreInst &I) {
         IRB.CreatePtrToInt(I.getPointerOperand(), intPtrType),
         ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
         data,
-        ConstantInt::get(IRB.getInt8Ty(), dataLayout.isLittleEndian() ? 1 : 0),
+        ConstantInt::get(IRB.getInt8Ty(), dataLayout.isLittleEndian() ? (isTlsData << 1) + 1 : (isTlsData << 1) + 0), 
         value
       }
     );
-  else
+  } else {
     IRB.CreateCall(
       runtime.concretizeMemory,
       {
@@ -893,6 +934,16 @@ void Symbolizer::visitStoreInst(StoreInst &I) {
         ConstantInt::get(intPtrType, dataLayout.getTypeStoreSize(dataType)),
       }
     );
+  
+    if (GlobalValue *GV = dyn_cast<GlobalValue>(I.getPointerOperand())) {
+      if (GV->isThreadLocal()) {
+        isTlsData = 1;
+        IRB.CreateCall(
+          runtime.switchFsRegisterToNative, {}
+        );
+      }
+    }
+  }
 
 #if HYBRID_DBG_CONSISTENCY_CHECK
   if (data) {
@@ -917,6 +968,13 @@ void Symbolizer::visitStoreInst(StoreInst &I) {
     }
   }
 #endif
+
+  if (isTlsData) {
+    IRBuilder<> IRB_after(I.getNextNode());
+    IRB_after.CreateCall(
+      runtime.switchFsRegisterToEmulation, {}
+    );
+  }
 }
 
 void Symbolizer::visitGetElementPtrInst(GetElementPtrInst &I) {
@@ -1226,33 +1284,70 @@ void Symbolizer::visitPHINode(PHINode &I) {
   symbolicExpressions[&I] = exprPHI;
 }
 
-void Symbolizer::visitExtractValueInst(ExtractValueInst &I) {
-  uint64_t offset = 0;
-  auto *indexedType = I.getAggregateOperand()->getType();
-  for (auto index : I.indices()) {
-    // All indices in an extractvalue instruction are constant:
-    // https://llvm.org/docs/LangRef.html#extractvalue-instruction
-
-    if (auto *structType = dyn_cast<StructType>(indexedType)) {
-      offset += dataLayout.getStructLayout(structType)->getElementOffset(index);
-      indexedType = structType->getElementType(index);
-    } else {
-      auto *arrayType = cast<ArrayType>(indexedType);
-      unsigned elementSize =
-          dataLayout.getTypeAllocSize(arrayType->getArrayElementType());
-      offset += elementSize * index;
-      indexedType = arrayType->getArrayElementType();
-    }
-  }
-
+void Symbolizer::visitInsertValueInst(InsertValueInst &I) {
   IRBuilder<> IRB(&I);
+
+#if HYBRID_DBG_CONSISTENCY_CHECK
+  if (isArgInteger(I.getInsertedValueOperand())) {
+    IRB.CreateCall(
+      runtime.checkConsistency,
+      {
+        getSymbolicExpressionOrNull(I.getInsertedValueOperand()),
+        I.getInsertedValueOperand()->getType()->isPointerTy() 
+          ? IRB.CreateCast(Instruction::CastOps::PtrToInt, I.getInsertedValueOperand(), IRB.getInt64Ty())
+          : IRB.CreateCast(Instruction::CastOps::ZExt, I.getInsertedValueOperand(), IRB.getInt64Ty()),
+        ConstantInt::get(IRB.getInt64Ty(), 0)
+      }
+    );
+  }
+#endif
+
+  auto insert = buildRuntimeCall(
+      IRB, runtime.buildInsert,
+      {{I.getAggregateOperand(), true},
+       {I.getInsertedValueOperand(), true},
+       {IRB.getInt64(aggregateMemberOffset(I.getAggregateOperand()->getType(),
+                                           I.getIndices())),
+        false},
+       {IRB.getInt8(isLittleEndian(I.getInsertedValueOperand()->getType()) ? 1 : 0), false}});
+  registerSymbolicComputation(insert, &I);
+}
+
+void Symbolizer::visitExtractValueInst(ExtractValueInst &I) {
+  IRBuilder<> IRB(&I);
+#if !HYBRID_DBG_CONSISTENCY_CHECK
   auto extract = buildRuntimeCall(
       IRB, runtime.buildExtract,
       {{I.getAggregateOperand(), true},
-       {IRB.getInt64(offset), false},
+       {IRB.getInt64(aggregateMemberOffset(I.getAggregateOperand()->getType(),
+                                           I.getIndices())),
+        false},
        {IRB.getInt64(dataLayout.getTypeStoreSize(I.getType())), false},
        {IRB.getInt8(isLittleEndian(I.getType()) ? 1 : 0), false}});
   registerSymbolicComputation(extract, &I);
+#else
+  symbolicExpressions[&I] = IRB.CreateCall(runtime.buildExtract, 
+                              {
+                                getSymbolicExpressionOrNull(I.getAggregateOperand()),
+                                IRB.getInt64(aggregateMemberOffset(I.getAggregateOperand()->getType(), I.getIndices())),
+                                IRB.getInt64(dataLayout.getTypeStoreSize(I.getType())),
+                                IRB.getInt8(isLittleEndian(I.getType()) ? 1 : 0)
+                              });
+  
+  if (isArgInteger(&I)) {
+    IRB.SetInsertPoint(I.getNextNode());
+    IRB.CreateCall(
+      runtime.checkConsistency,
+      {
+        getSymbolicExpressionOrNull(&I),
+        I.getType()->isPointerTy() 
+          ? IRB.CreateCast(Instruction::CastOps::PtrToInt, &I, IRB.getInt64Ty())
+          : IRB.CreateCast(Instruction::CastOps::ZExt, &I, IRB.getInt64Ty()),
+        ConstantInt::get(IRB.getInt64Ty(), 0)
+      }
+    );
+  }
+#endif
 }
 
 void Symbolizer::visitSwitchInst(SwitchInst &I) {
@@ -1281,7 +1376,7 @@ void Symbolizer::visitSwitchInst(SwitchInst &I) {
         runtime.comparisonHandlers[CmpInst::ICMP_EQ],
         {conditionExpr, createValueExpression(caseHandle.getCaseValue(), IRB)});
     IRB.CreateCall(runtime.pushPathConstraint,
-#if HYBRID_SWITCH_TARGETS
+#if 1 // HYBRID_SWITCH_TARGETS
                    {caseConstraint, caseTaken, 
                    ConstantInt::get(intPtrType,
                                   reinterpret_cast<uint64_t>(&I) + (k == 0 ? 0 : (0x10000 + k)))});
@@ -1363,14 +1458,19 @@ CallInst *Symbolizer::createValueExpression(Value *V, IRBuilder<> &IRB) {
 
     auto *memory = IRB.CreateAlloca(V->getType());
     IRB.CreateStore(V, memory);
-    return IRB.CreateCall(
-        runtime.readMemory,
-        {llvm::ConstantPointerNull::get(
-          llvm::IntegerType::getInt8PtrTy(V->getContext())),
-         IRB.CreatePtrToInt(memory, intPtrType),
-         ConstantInt::get(intPtrType,
+    IRB.CreateCall(
+      runtime.concretizeMemory,
+      {
+        IRB.CreatePtrToInt(memory, intPtrType),
+        ConstantInt::get(intPtrType,
                           dataLayout.getTypeStoreSize(V->getType())),
-         IRB.getInt8(0)});
+      }
+    );
+    return IRB.CreateCall(
+        runtime.buildValueFromMemory,
+        {IRB.CreatePtrToInt(memory, intPtrType),
+         ConstantInt::get(intPtrType,
+                          dataLayout.getTypeStoreSize(V->getType()))});
   }
 
   errs() << "Warning: unexpected constant type " << *valueType << '\n';
@@ -1415,4 +1515,27 @@ void Symbolizer::tryAlternative(IRBuilder<> &IRB, Value *V) {
     registerSymbolicComputation(SymbolicComputation(
         concreteDestExpr, pushAssertion, {{V, 0, destAssertion}}));
   }
+}
+
+uint64_t Symbolizer::aggregateMemberOffset(Type *aggregateType,
+                                           ArrayRef<unsigned> indices) const {
+  uint64_t offset = 0;
+  auto *indexedType = aggregateType;
+  for (auto index : indices) {
+    // All indices in an extractvalue instruction are constant:
+    // https://llvm.org/docs/LangRef.html#extractvalue-instruction
+
+    if (auto *structType = dyn_cast<StructType>(indexedType)) {
+      offset += dataLayout.getStructLayout(structType)->getElementOffset(index);
+      indexedType = structType->getElementType(index);
+    } else {
+      auto *arrayType = cast<ArrayType>(indexedType);
+      unsigned elementSize =
+          dataLayout.getTypeAllocSize(arrayType->getArrayElementType());
+      offset += elementSize * index;
+      indexedType = arrayType->getArrayElementType();
+    }
+  }
+
+  return offset;
 }

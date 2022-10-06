@@ -30,6 +30,7 @@ struct Runtime {
 
   SymFnT buildInteger{};
   SymFnT buildInteger128{};
+  SymFnT buildValueFromMemory{};
   SymFnT buildFloat{};
   SymFnT buildNullPointer{};
   SymFnT buildTrue{};
@@ -51,7 +52,13 @@ struct Runtime {
   SymFnT buildBoolXor{};
   SymFnT buildBoolToBits{};
   SymFnT buildBoolToSignBits{};
+  SymFnT buildInsert{};
+  SymFnT buildExtract{};
+
+  // branch queries
   SymFnT pushPathConstraint{};
+
+  // symbolic hanlding of function calls / returns
   SymFnT getParameterExpression{};
   SymFnT getParameterExpressionWithTruncate{};
   SymFnT setParameterExpression{};
@@ -61,19 +68,26 @@ struct Runtime {
   SymFnT isIntParameter{};
   SymFnT getReturnExpressionWithTruncate{};
   SymFnT getReturnExpression{};
+
+  // models
   SymFnT memcpy{};
   SymFnT memset{};
   SymFnT memmove{};
+  SymFnT LibcMemset{};
+  SymFnT LibcMemcpy{};
+  SymFnT LibcMemmove{};
+
+  // memory
   SymFnT readMemory{};
   SymFnT writeMemory{};
-  SymFnT buildExtract{};
+  SymFnT concretizeMemory{};
+
+  // events
   SymFnT notifyCall{};
   SymFnT notifyRet{};
   SymFnT notifyBasicBlock{};
 
-  SymFnT debugFunctionAfterReturn{};
-  SymFnT printPathConstraints{};
-
+  // handling of indirect calls
   SymFnT wrapIndirectCallArgCount{};
   SymFnT wrapIndirectCallArgInt{};
   SymFnT wrapIndirectCallInt1{};
@@ -85,13 +99,14 @@ struct Runtime {
   SymFnT wrapIndirectCallVoid{};
   SymFnT checkIndirectCallTarget{};
 
-  SymFnT LibcMemset{};
-  SymFnT LibcMemcpy{};
-  SymFnT LibcMemmove{};
-
-  SymFnT checkConsistency{};
+  // variadic functions
   SymFnT vaListStart{};
-  SymFnT concretizeMemory{};
+
+  // debugging
+  SymFnT checkConsistency{};
+
+  SymFnT switchFsRegisterToNative{};
+  SymFnT switchFsRegisterToEmulation{};
 
   /// Mapping from icmp predicates to the functions that build the corresponding
   /// symbolic expressions.

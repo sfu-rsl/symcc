@@ -77,14 +77,14 @@ extern "C" {
   void *SYM(memmove)(void *dest, const void *src, size_t n) { return NULL; }
 }
 
-char *SYM(strncpy)(char *dest, const char *src, size_t n) { return NULL; }
-const char *SYM(strchr)(const char *s, int c) { return NULL; }
-int SYM(memcmp)(const void *a, const void *b, size_t n) { return 0; }
-uint32_t SYM(ntohl)(uint32_t netlong) { return 0; }
+char *SYM(strncpy)(char *dest, const char *src, size_t n) { return strncpy(dest, src, n); }
+const char *SYM(strchr)(const char *s, int c) { return strchr(s, c); }
+int SYM(memcmp)(const void *a, const void *b, size_t n) { return memcmp(a, b, n); }
+uint32_t SYM(ntohl)(uint32_t netlong) { return ntohl(netlong); }
 
-uint32_t SYM(strncmp)(const char *a, const char *b, size_t n) { return 0; }
-int SYM(bcmp)(const void *a, const void *b, size_t n) { return 0; }
-uint32_t SYM(strcmp)(const char *a, const char *b) { return 0; }
-uint32_t SYM(strlen)(const char *a) { return 0; }
+uint32_t SYM(strncmp)(const char *a, const char *b, size_t n) { return strncmp(a, b, n); }
+int SYM(bcmp)(const void *a, const void *b, size_t n) { return bcmp(a, b, n); }
+uint32_t SYM(strcmp)(const char *a, const char *b) { return strcmp(a, b); }
+uint32_t SYM(strlen)(const char *a) { return strlen(a); }
 
 }

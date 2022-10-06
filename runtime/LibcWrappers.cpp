@@ -139,7 +139,10 @@ ssize_t SYM(read)(int fildes, void *buf, size_t nbyte) {
 
   if (result < 0)
     return result;
-    
+
+  if (fildes != inputFileDescriptor && isConcrete(buf, result))
+    return result;
+
   ReadWriteShadow shadow(buf, result);
   for (auto shadowByte = shadow.begin(); shadowByte != shadow.end(); ++shadowByte)
     shadowByte.writeByte(fildes == inputFileDescriptor ? _sym_get_input_byte(inputOffset++) : nullptr);
@@ -380,8 +383,7 @@ extern "C" {
     tryAlternative(src, _sym_get_parameter_expression(1), _sym_get_call_site());
     tryAlternative(n, _sym_get_parameter_expression(2), _sym_get_call_site());
 
-    _sym_memcpy(static_cast<uint8_t *>(dest), static_cast<const uint8_t *>(src),
-                n);
+    _sym_memcpy(static_cast<uint8_t *>(dest), static_cast<const uint8_t *>(src), n);
     _sym_set_return_expression(_sym_get_parameter_expression(0));
     return result;
   }
@@ -394,7 +396,10 @@ extern "C" {
     tryAlternative(s, _sym_get_parameter_expression(0), _sym_get_call_site());
     tryAlternative(n, _sym_get_parameter_expression(2), _sym_get_call_site());
 
-    _sym_memset(static_cast<uint8_t *>(s), _sym_get_parameter_expression(1), n);
+    if (_sym_get_parameter_expression(1))
+      _sym_memset(static_cast<uint8_t *>(s), _sym_get_parameter_expression(1), n);
+    else
+      _sym_concretize_memory(static_cast<uint8_t *>(s), n);
     _sym_set_return_expression(_sym_get_parameter_expression(0));
     return result;
   }
@@ -530,20 +535,26 @@ uint32_t SYM(strncmp)(const char *a, const char *b, size_t n) {
   auto result = strncmp(a, b, n);
   _sym_set_return_expression(nullptr);
 
-  if (isConcrete(a, n) && isConcrete(b, n))
+  size_t a_len = strnlen(a, n);
+  size_t b_len = strnlen(b, n);
+  if (isConcrete(a, a_len) && isConcrete(b, b_len))
     return result;
 
-  auto aShadowIt = ReadOnlyShadow(a, n).begin_non_null();
-  auto bShadowIt = ReadOnlyShadow(b, n).begin_non_null();
+  if (a == nullptr || b == nullptr)
+    return result;
+
+  auto aShadowIt = ReadOnlyShadow(a, a_len).begin_non_null();
+  auto bShadowIt = ReadOnlyShadow(b, b_len).begin_non_null();
   auto *allEqual = _sym_build_equal(*aShadowIt, *bShadowIt);
-  for (size_t i = 1; i < n; i++) {
+  size_t min_len = a_len < b_len ? a_len : b_len;
+  for (size_t i = 1; i < min_len; i++) {
     ++aShadowIt;
     ++bShadowIt;
     allEqual =
         _sym_build_bool_and(allEqual, _sym_build_equal(*aShadowIt, *bShadowIt));
   }
 
-  _sym_push_path_constraint(allEqual, result == 0,
+  _sym_push_path_constraint(allEqual, strncmp(a, b, min_len) == 0,
                             reinterpret_cast<uintptr_t>(_sym_get_call_site()));
   
   return result;
@@ -624,7 +635,6 @@ uint32_t SYM(strlen)(const char *a) {
   auto *zero = _sym_build_integer(0, 8);
   int k = 0;
   for (int i = result - 1; i >= 0; i--) {
-    printf("k = %d\n", k);
     allEqual = _sym_build_ite(_sym_build_equal(*aShadowIt, zero), _sym_build_integer(k++, 64), allEqual);
     ++aShadowIt;
   }

@@ -17,7 +17,10 @@
 #include <vector>
 
 #include <Runtime.h>
+
+#if 0
 #include <Shadow.h>
+#endif
 
 /// A list of memory regions that are known to contain symbolic expressions.
 std::vector<ExpressionRegion> expressionRegions;
@@ -27,8 +30,8 @@ void registerExpressionRegion(ExpressionRegion r) {
 }
 
 std::set<SymExpr> collectReachableExpressions() {
-  abort();
-#if 0
+  abort(); // FIXME
+
   std::set<SymExpr> reachableExpressions;
   auto collectReachableExpressions = [&](ExpressionRegion r) {
     auto *end = r.first + r.second;
@@ -42,11 +45,10 @@ std::set<SymExpr> collectReachableExpressions() {
   for (auto &r : expressionRegions) {
     collectReachableExpressions(r);
   }
-
+#if 0 // FIXME
   for (const auto &mapping : g_shadow_pages) {
     collectReachableExpressions({mapping.second, kPageSize});
   }
-
-  return reachableExpressions;
 #endif
+  return reachableExpressions;
 }

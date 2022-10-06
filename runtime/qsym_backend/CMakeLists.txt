@@ -14,7 +14,6 @@
 
 # Build the parts of the Qsym backend that are relevant for us
 
-set(XXHASH_SOURCE_DIR "qsym/qsym/pintool")
 set(QSYM_SOURCE_DIR "qsym/qsym/pintool")
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/expr__gen.cpp
@@ -70,6 +69,7 @@ add_library(SymRuntime SHARED
   ${QSYM_SOURCE_DIR}/third_party/llvm/range.cpp
   ${QSYM_SOURCE_DIR}/third_party/xxhash/xxhash.cpp
   ${SHARED_RUNTIME_SOURCES}
+  ../Shadow.cpp
   Runtime.cpp)
 
 target_include_directories(SymRuntime PRIVATE
@@ -83,7 +83,6 @@ target_include_directories(SymRuntime SYSTEM PRIVATE
 # We need to get the LLVM support component for llvm::APInt.
 llvm_map_components_to_libnames(QSYM_LLVM_DEPS support)
 
-target_link_libraries(SymRuntime ${CMAKE_CURRENT_SOURCE_DIR}/${QSYM_SOURCE_DIR}/external-libs/libZ3Fuzzy.a)
 target_link_libraries(SymRuntime ${Z3_LIBRARIES} ${QSYM_LLVM_DEPS})
 
 # We use std::filesystem, which has been added in C++17. Before its official

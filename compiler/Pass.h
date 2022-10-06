@@ -30,6 +30,7 @@ public:
 
 private:
   static constexpr char kSymCtorName[] = "__sym_ctor";
+  static constexpr char kSymDtorName[] = "__sym_dtor";
 
   /// Mapping from global variables to their corresponding symbolic expressions.
   llvm::ValueMap<llvm::GlobalVariable *, llvm::GlobalVariable *>

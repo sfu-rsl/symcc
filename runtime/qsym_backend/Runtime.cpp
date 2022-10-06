@@ -16,6 +16,8 @@
 // Definitions that we need for the Qsym backend
 //
 
+#define HYBRID_DBG_CONSISTENCY_CHECK 0
+
 #include "Runtime.h"
 #include "GarbageCollection.h"
 
@@ -34,6 +36,7 @@
 #include <iterator>
 #include <map>
 #include <unordered_set>
+#include <numeric>
 
 #if HAVE_FILESYSTEM
 #include <filesystem>
@@ -61,11 +64,7 @@
 // Runtime
 #include <Config.h>
 #include <LibcWrappers.h>
-#include <Shadow.h>
-
-#include <third_party/xxhash/xxhash.h>
-
-#include "../../../symqemu-hybrid/accel/tcg/hybrid/hybrid_debug.h"
+#include "../Shadow.h"
 
 namespace qsym {
 
@@ -74,16 +73,14 @@ Solver *g_solver;
 CallStackManager g_call_stack_manager;
 z3::context *g_z3_context;
 
-#if HYBRID_CACHE_CONSTANTS
-ExprBuilder *CEB;
-#endif
-
 } // namespace qsym
 
 namespace {
 
 /// Indicate whether the runtime has been initialized.
 std::atomic_flag g_initialized = ATOMIC_FLAG_INIT;
+std::atomic_flag g_pre_initialized = ATOMIC_FLAG_INIT;
+std::atomic_flag g_finalized = ATOMIC_FLAG_INIT;
 
 /// The file that contains out input.
 std::string inputFileName;
@@ -123,16 +120,64 @@ namespace fs = std::filesystem;
 namespace fs = std::experimental::filesystem;
 #endif
 
-void _sym_initialize(void) {}
+#define XXH_STATIC_LINKING_ONLY   /* access advanced declarations */
+#define XXH_IMPLEMENTATION   /* access definitions */
+#include "qsym/qsym/pintool/third_party/xxhash/xxhash.h"
+
+// Tracer
+static int bitmapSize = 0;
+static uint8_t* bitmapEdgesMain = nullptr;
+static uint8_t* bitmapEdgesAll = nullptr;
+static uint8_t* bitmapTrace = nullptr;
+static uint16_t* bitmapUnique = nullptr;
+static XXH64_state_t* edgeState = nullptr;
+static XXH64_state_t* pathMainHash = nullptr;
+static XXH64_state_t* pathAllHash = nullptr;
+static uintptr_t lastBasicBlockMainId = 0;
+static uintptr_t lastBasicBlockAllId = 0;
+
+void _sym_initialize(void) {
+  if (getenv("SYMFUSION_HYBRID") == NULL) {
+    _sym_pre_initialize_qemu();
+    _sym_initialize_qemu();
+  }
+}
+
+void _sym_pre_initialize_qemu(void){
+  if (g_pre_initialized.test_and_set())
+    return;
+
+  loadConfig();
+  initLibcWrappers();
+  std::cerr << "This is SymFusion running with the QSYM backend" << std::endl;
+
+  if (!g_config.fullyConcrete) {
+    g_z3_context = new z3::context{};
+    g_expr_builder = g_config.pruning ? PruneExprBuilder::create()
+                                      : SymbolicExprBuilder::create();
+  
+  }
+
+  if (g_config.pathTracerMode) {
+    pathMainHash = XXH64_createState();
+    XXH64_reset(pathMainHash, 0x0);
+    pathAllHash = XXH64_createState();
+    XXH64_reset(pathAllHash, 0x0);
+
+    bitmapSize = g_config.bitmapSize;
+    bitmapEdgesMain = (uint8_t*) calloc(1, g_config.bitmapSize);
+    bitmapEdgesAll = (uint8_t*) calloc(1, g_config.bitmapSize);
+    bitmapTrace = (uint8_t*) calloc(1, g_config.bitmapSize);
+    bitmapUnique =  (uint16_t*) calloc(sizeof(short), g_config.bitmapSize);
+    edgeState = XXH64_createState();
+  }
+}
 
 void _sym_initialize_qemu(void) {
   if (g_initialized.test_and_set())
     return;
 
-  loadConfig();
-  initLibcWrappers();
-  std::cerr << "This is SymCC running with the QSYM backend" << std::endl;
-  if (g_config.fullyConcrete) {
+  if (g_config.fullyConcrete && !g_config.pathTracerMode && getenv("SYMCC_INPUT_STDIN_FILE") == NULL) {
     std::cerr
         << "Performing fully concrete execution (i.e., without symbolic input)"
         << std::endl;
@@ -152,8 +197,20 @@ void _sym_initialize_qemu(void) {
   if (g_config.inputFile.empty()) {
     std::cerr << "Reading program input until EOF (use Ctrl+D in a terminal)..."
               << std::endl;
-    std::istreambuf_iterator<char> in_begin(std::cin), in_end;
-    std::vector<char> inputData(in_begin, in_end);
+    
+    std::vector<char> inputData;
+    if (getenv("SYMCC_INPUT_STDIN_FILE")) {
+      // printf("Reading from %s\n", getenv("SYMCC_INPUT_STDIN_FILE"));
+      auto a = std::ifstream(getenv("SYMCC_INPUT_STDIN_FILE"), std::ios::binary);
+      std::istreambuf_iterator<char> in_begin(a), in_end;
+      std::vector<char> inputCopyData(in_begin, in_end);
+      inputData = inputCopyData;
+    } else {
+      std::istreambuf_iterator<char> in_begin(std::cin), in_end;
+      std::vector<char> inputCopyData(in_begin, in_end);
+      inputData = inputCopyData;
+    }
+
     inputFileName = std::tmpnam(nullptr);
     std::ofstream inputFile(inputFileName, std::ios::trunc);
     std::copy(inputData.begin(), inputData.end(),
@@ -181,14 +238,123 @@ void _sym_initialize_qemu(void) {
               << std::endl;
   }
 
-  g_z3_context = new z3::context{};
+  if (g_config.pathTracerMode || g_config.fullyConcrete)
+    return;
+
   g_solver =
       new Solver(inputFileName, g_config.outputDir, g_config.aflCoverageMap);
-  g_expr_builder = g_config.pruning ? PruneExprBuilder::create()
-                                    : SymbolicExprBuilder::create();
-#if HYBRID_CACHE_CONSTANTS
-  CEB = g_expr_builder;
-#endif
+}
+
+static void saveBitmap(uint8_t* bitmap, char* path, int size) {
+  if (bitmap) {
+    std::ofstream ofs;
+    ofs.open(path, std::ios::binary);
+    if (ofs.fail())
+      printf("Unable to open a bitmap to commit");
+    ofs.write((char*)bitmap, size);
+    ofs.close();
+  }
+}
+
+static const uint8_t count_class_lookup8[256] = {
+  0,          // [0]
+  1,          // [1]
+  2,          // [3]
+  4, 4, 4, 4, // [4 ... 7]
+  8, 8, 8, 8, 8, 8, 8, 8,
+  16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
+  32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 
+  32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 
+  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 
+  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 
+  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 
+  64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 
+  128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 
+  128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 
+  128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 
+  128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 
+  128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 
+  128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 
+  128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 
+  128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128 
+};
+
+static void compare_bitmaps(uint8_t* virgin_bitmap, char* trace_path, char* report_file) {
+  // load trace bitmap
+  FILE* fp = fopen(trace_path, "r");
+  if (!fp) {
+    printf("Cannot open: %s\n", trace_path);
+    abort();
+  }
+  int count = 0;
+  while (count < bitmapSize) {
+    int res = fread(bitmapTrace + count, 1, bitmapSize - count, fp);
+    if (res <= 0) break;
+    count += res;
+  }
+  if (count < bitmapSize) {
+    printf("Cannot read full bitmap: %s [%d]\n", trace_path, count);
+    abort();
+  }
+  fclose(fp);
+
+  // create report
+  fp = fopen(report_file, "w");
+  if (!fp) {
+    printf("Cannot open: %s\n", report_file);
+    abort();
+  }
+
+  // compare with virgin bitmap, update trace bitmap,
+  // and write report about unique entries
+  for (int i = 0; i < bitmapSize; i++) {
+    uint8_t v = count_class_lookup8[virgin_bitmap[i]];
+    if ((v | bitmapTrace[i]) != bitmapTrace[i]) {
+      uint16_t index = (uint16_t) i;
+      fwrite(&index, sizeof(index), 1, fp);
+      bitmapTrace[i] |= v;
+      // printf("Unique ID: %d\n", i);
+    }
+  }
+
+  // close report
+  fclose(fp);
+
+  // save trace bitmap
+  fp = fopen(trace_path, "w");
+  if (!fp) {
+    printf("Cannot open: %s\n", trace_path);
+    abort();
+  }
+  count = 0;
+  while (count < bitmapSize) {
+    int res = fwrite(bitmapTrace + count, 1, bitmapSize - count, fp);
+    if (res <= 0) break;
+    count += res;
+  }
+  if (count < bitmapSize) {
+    printf("Cannot write full bitmap: %s [%d]\n", trace_path, count);
+    abort();
+  }
+  fclose(fp);
+}
+
+void _sym_finalize(void) {
+  if (g_finalized.test_and_set())
+    return;
+
+  if (getenv("SYMFUSION_TRACER_SKIP_DUMP"))
+    return;
+
+  if (g_config.pathTracerMode) {
+    printf("Saving bitmaps for hash %llx %llx...\n", XXH64_digest(pathMainHash), XXH64_digest(pathAllHash));
+    compare_bitmaps(bitmapEdgesMain, g_config.bitmapTraceMainEdges, g_config.bitmapMainEdges);
+    compare_bitmaps(bitmapEdgesAll, g_config.bitmapTraceAllEdges, g_config.bitmapAllEdges);
+    uint64_t value = XXH64_digest(pathMainHash);
+    saveBitmap((uint8_t*) &value, g_config.bitmapMainPath, sizeof(value));
+    value = XXH64_digest(pathAllHash);
+    saveBitmap((uint8_t*) &value, g_config.bitmapAllPath, sizeof(value));
+  }
 }
 
 SymExpr _sym_build_integer(uint64_t value, uint8_t bits) {
@@ -275,9 +441,15 @@ DEF_BINARY_EXPR_BUILDER(and, And)
 DEF_BINARY_EXPR_BUILDER(bool_or, LOr)
 DEF_BINARY_EXPR_BUILDER(or, Or)
 DEF_BINARY_EXPR_BUILDER(bool_xor, Distinct)
-DEF_BINARY_EXPR_BUILDER(xor, Xor)
+// DEF_BINARY_EXPR_BUILDER(xor, Xor)
 
 #undef DEF_BINARY_EXPR_BUILDER
+
+SymExpr _sym_build_xor(SymExpr a, SymExpr b) {   
+  if (a == b) return nullptr; // optimization                        
+  return registerExpression(g_expr_builder->createXor(               
+      allocatedExpressions.at(a), allocatedExpressions.at(b)));             
+}
 
 SymExpr _sym_build_neg(SymExpr expr) {
   return registerExpression(
@@ -304,78 +476,22 @@ SymExpr _sym_build_trunc(SymExpr expr, uint8_t bits) {
       g_expr_builder->createTrunc(allocatedExpressions.at(expr), bits));
 }
 
-#if HYBRID_DBG_DUMP_QUERY
-static int debug_mode = 0;
-extern "C" {
-int debug_count = 0;
-unsigned int debug_hash = 0;
-}
-XXH32_state_t debug_state;
-static unsigned int expected_hash;
-static int expected_count;
-static int expected_taken;
-#endif
-
-// static int counter = 0;
 void _sym_push_path_constraint(SymExpr constraint, int taken,
                                uintptr_t site_id) {
   if (constraint == nullptr)
     return;
 
-#if HYBRID_DBG_DUMP_QUERY
-  if (debug_count == 0) {
-    XXH32_reset(&debug_state, 0);
-    char* e = getenv("SYM_DEBUG");
-    if (e != NULL)
-      debug_mode = 1;
-    if (debug_mode) {
-      e = getenv("SYM_DEBUG_HASH");
-      assert(e);
-      expected_hash = (int)strtoul(e, NULL, 16);
-      e = getenv("SYM_DEBUG_COUNT");
-      assert(e);
-      expected_count = (int)strtoul(e, NULL, 10);
-      e = getenv("SYM_DEBUG_TAKEN");
-      assert(e);
-      expected_taken = (int)strtoul(e, NULL, 10);
-    }
-  }
-  XXH32_update(&debug_state, &site_id, sizeof(site_id));
-  debug_count += 1;
-
-  const char *s_expr = _sym_expr_to_string(constraint);
-  printf("QUERY AT addr=%lx hash=%x counter=%d taken=%d: %s\n", site_id, debug_hash, debug_count, taken, s_expr);
-  g_call_stack_manager.printStack();
-
-  debug_hash = XXH32_digest(&debug_state);
-  if (debug_mode) {
-    if (debug_count == expected_count) {
-      if (debug_hash == expected_hash) {
-        if (taken == expected_taken) {
-          printf("OK\n");
-          exit(0);
-        } else {
-          printf("Divergence: different taken\n");
-          exit(1);
-        }
-      } else {
-        printf("Divergence: different path\n");
-        exit(1);
-      }
-      exit(0);
-    } 
-    assert(debug_count < expected_count);
-  }
-
-  if (!debug_mode)
-#elif HYBRID_DBG_PRINT || HYBRID_DBG_PRINT_QUERY_ADDR
+  if (_sym_is_concrete_mode_enabled())
+    return;
+#if 0
+  if (_sym_is_emulation_mode_enabled())
+    return;
+#endif
+#if 0
   printf("QUERY AT addr=%lx taken=%d\n", site_id, taken);
+  g_call_stack_manager.printStack();
 #endif
   g_solver->addJcc(allocatedExpressions.at(constraint), taken != 0, site_id);
-
-#if HYBRID_DBG_CONSISTENCY_CHECK
-  _sym_check_consistency(constraint, taken, site_id);
-#endif
 }
 
 SymExpr _sym_get_input_byte(size_t offset) {
@@ -402,9 +518,9 @@ SymExpr _sym_build_bool_to_bits(SymExpr expr, uint8_t bits) {
 SymExpr _sym_build_bool_to_sign_bits(SymExpr expr, uint8_t bits) {
   if (expr == NULL) return NULL;
   expr = registerExpression(
-      g_expr_builder->boolToBit(allocatedExpressions.at(expr), 1));
+    g_expr_builder->boolToBit(allocatedExpressions.at(expr), 1));
   return registerExpression(g_expr_builder->createSExt(
-      allocatedExpressions.at(expr), bits));
+    allocatedExpressions.at(expr), bits));
 }
 
 //
@@ -450,52 +566,77 @@ UNSUPPORTED(SymExpr _sym_build_float_to_unsigned_integer(SymExpr, uint8_t))
 //
 
 void _sym_notify_call(uintptr_t site_id) {
+  // printf("CALL %lx\n", site_id);
 #if 0
-  uint64_t* a = (uint64_t*)0x40007fee40;
-  if (*a == 0x40007fee50)
-    printf("VALUE %lx AT %lx %lx\n", 0x40007fee50, 0x40007fee40, site_id);
-  assert(*a != 0x40007fee50);
+  // _sym_concretize_memory(((uint8_t*)&fake) - 0x4000, 0x4000);
+  uint64_t a = 0x40007ff1bf;
+  printf("*0x%lx = %lx is_concrete=%d\n", a, *((uint8_t*)a),
+    isConcrete((uint8_t*)a, 1));
 #endif
   g_call_stack_manager.visitCall(site_id);
 }
 
-void _sym_update_call(__attribute__((unused)) uintptr_t site_id) {
-  assert(0);
-  // g_call_stack_manager.updateVisitCall(site_id);
-}
-
-uintptr_t _sym_get_call_site(void) {
-  return g_call_stack_manager.getCallSite();
-}
-
 void _sym_notify_ret(uintptr_t site_id) {
+  // printf("RET %lx\n", site_id);
 #if 0
-  uint64_t* a = (uint64_t*)0x40007fee40;
-  if (*a == 0x40007fee50)
-    printf("VALUE %lx AT %lx\n", 0x40007fee50, 0x40007fee40);
-  assert(*a != 0x40007fee50);
+  // _sym_concretize_memory(((uint8_t*)&fake) - 0x4000, 0x4000);
+  uint64_t a = 0x40007ff1bf;
+  printf("*0x%lx = %lx is_concrete=%d\n", a, *((uint8_t*)a),
+    isConcrete((uint8_t*)a, 1));
 #endif
   g_call_stack_manager.visitRet(site_id);
+  // _sym_print_stack();
 }
 
-static uintptr_t last_site_id = 0;
 void _sym_notify_basic_block(uintptr_t site_id) {
+  // printf("BB %lx\n", site_id);
 #if 0
-  uint64_t v = 0x55555561ab90;
-  uint64_t* a = (uint64_t*)0x40007ffaf8;
-  if (*a == v)
-    printf("VALUE %lx AT %p %lx %lx\n", v, a, last_site_id, site_id);
-  // assert(*a != 0x40007fee50);
+  _sym_concretize_memory(((uint8_t*)frame) - 0x4000, 0x4000);
+  uint64_t a = 0x40007ff1bf;
+  printf("*0x%lx = %lx is_concrete=%d\n", a, *((uint8_t*)a),
+    isConcrete((uint8_t*)a, 1));
 #endif
-  last_site_id = site_id;
-#if HYBRID_DBG_PRINT_PC
-  printf("BB: %lx\n", site_id);
+  if (g_config.pathTracerMode) {
+    int outsideMain = _sym_is_emulation_mode_enabled();
+    if (bitmapSize) {
+      uint32_t edgeId;
+      if (!outsideMain) {
+        XXH64_reset(edgeState, 0x0);
+        XXH64_update(edgeState, &lastBasicBlockMainId, sizeof(lastBasicBlockMainId));
+        XXH64_update(edgeState, &site_id, sizeof(site_id));
+#if 1
+        uint64_t context_hash = g_call_stack_manager.getContextHash();
+        XXH64_update(edgeState, &context_hash, sizeof(context_hash));
 #endif
-  g_call_stack_manager.visitBasicBlock(site_id);
-}
+        edgeId = XXH64_digest(edgeState);
+        bitmapEdgesMain[edgeId % bitmapSize] += 1;
+      }
 
-uintptr_t _sym_get_basic_block_id(){
-  return last_site_id;
+      if (outsideMain || lastBasicBlockAllId != lastBasicBlockMainId) {
+        XXH64_reset(edgeState, 0x0);
+        XXH64_update(edgeState, &lastBasicBlockAllId, sizeof(lastBasicBlockAllId));
+        XXH64_update(edgeState, &site_id, sizeof(site_id));
+#if 1
+        uint64_t context_hash = g_call_stack_manager.getContextHash();
+        XXH64_update(edgeState, &context_hash, sizeof(context_hash));
+#endif
+        edgeId = XXH64_digest(edgeState);
+      }
+      bitmapEdgesAll[edgeId % bitmapSize] += 1;
+    }
+
+    if (!outsideMain) {
+      lastBasicBlockMainId = site_id;
+      XXH64_update(pathMainHash, &site_id, sizeof(site_id)); 
+    }
+
+    lastBasicBlockAllId = site_id;       
+    XXH64_update(pathAllHash, &site_id, sizeof(site_id));
+
+    // printf("PathHash: %lx\n", (uint64_t) XXH64_digest(pathHash));
+  }
+
+  g_call_stack_manager.visitBasicBlock(site_id);
 }
 
 //
@@ -513,23 +654,15 @@ const char *_sym_expr_to_string(SymExpr expr) {
   return buffer;
 }
 
-int _sym_feasible(SymExpr expr) {
-  return g_solver->isFeasible(allocatedExpressions.at(expr));
-#if 0
-  // expr->simplify();
+feasibility_result_t _sym_feasible(SymExpr expr) {
+  expr->simplify();
 
-  // g_solver->reset();
-  // g_solver->syncConstraints(allocatedExpressions.at(expr));
-
-  // g_solver->push();
+  g_solver->push();
   g_solver->add(expr->toZ3Expr());
   bool feasible = (g_solver->check() == z3::sat);
-  // g_solver->pop();
+  g_solver->pop();
 
-  g_solver->reset();
-
-  return feasible;
-#endif
+  return feasible ? feasibility_result_t::SAT : feasibility_result_t::UNSAT;
 }
 
 //
@@ -539,9 +672,6 @@ int _sym_feasible(SymExpr expr) {
 void _sym_collect_garbage() {
   if (allocatedExpressions.size() < g_config.garbageCollectionThreshold)
     return;
-
-  printf("GARBAGE COLLECTOR\n");
-  return;
 
 #ifdef DEBUG_RUNTIME
   auto start = std::chrono::high_resolution_clock::now();
@@ -570,90 +700,228 @@ void _sym_collect_garbage() {
 #endif
 }
 
-#if HYBRID_DBG_CONSISTENCY_CHECK
+SymExpr _sym_read_memory(SymExpr addrExpr, uint8_t *addr, size_t length, uint8_t flags) {
+  bool little_endian = flags & 1;
+  assert(length && "Invalid query for zero-length memory region");
 
-#if HYBRID_DBG_CONSISTENCY_ALT
-static int consistency_counter = 0;
-static int consistency_debug_mode = -1;
-static int consistency_check_counter = -1;
-static uint64_t consistency_check_value = 0;
-#endif
-
-void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr) {  
+  if (flags & 2) _sym_switch_fs_to_emulation();
 #if 0
-  uint64_t* a = (uint64_t*)0x40007fead0;
-  if (*a == 0x40007feae0)
-    printf("VALUE %lx AT %lx\n", 0x40007feae0, 0x40007fead0);
-  // assert(*a != 0x40007feae0);
+  static int count = 0;
+  if (addr == (uint8_t *)0x40007ff940UL)
+    printf("\n[%d] Reading %ld bytes at %p\n\n", count++, length, addr);
 #endif
-  if (expr == NULL) return;
-  int res = g_solver->checkConsistency(allocatedExpressions.at(expr), expected_value);
-  if (res == 0) {
-    printf("CONSISTENCY CHECK FAILED AT %lx\n", addr);
-    _sym_print_stack();
-    printf("BB ID: %lx\n", _sym_get_basic_block_id());
-    assert(0);
-  }
-#if HYBRID_DBG_CONSISTENCY_ALT
-  if (consistency_debug_mode == -1) {
-    consistency_debug_mode = 0;
-    char* s = getenv("SYM_CONSISTENCY_ALT");
-    if (s) {
-      s = getenv("SYM_CONSISTENCY_COUNTER");
-      if (s == NULL) 
-          consistency_debug_mode = 1;
-      else { 
-        consistency_debug_mode = 2;
-        consistency_check_counter = (int)strtoul(s, NULL, 10);
-        s = getenv("SYM_CONSISTENCY_VALUE");
-        assert(s);
-        consistency_check_value = (uint64_t)strtoul(s, NULL, 16);
-      }
-    }
-  }
-  if (consistency_debug_mode == 2) {
-    if (consistency_check_counter == consistency_counter) {
-      if (expected_value == consistency_check_value)
-        printf("Value is %lx but should be different from %lx\n", expected_value, consistency_check_value);
-      assert(expected_value != consistency_check_value && "Inconsistent value");
-      printf("ALTERNATIVE VALUE CHECK: OK\n");
-      exit(0);
-    }
-    consistency_counter++;
-    assert(consistency_counter <= consistency_check_counter);
-  } else if (consistency_debug_mode == 1) {
-    printf("ALT QUERY: %s\n", _sym_expr_to_string(expr));
-    g_solver->alternativeSolution(allocatedExpressions.at(expr), expected_value, consistency_counter++);
-    if (consistency_counter > 5000)
-      exit(0);
-  }
-#endif
-}
-#else
-void _sym_check_consistency(__attribute__((unused)) SymExpr expr, __attribute__((unused)) uint64_t expected_value, __attribute__((unused)) uint64_t addr) {}
+#ifdef DEBUG_RUNTIME
+  std::cerr << "Reading " << length << " bytes from address " << P(addr)
+            << std::endl;
+  dump_known_regions();
 #endif
 
-int _sym_interesting_context(void) {
-  return g_call_stack_manager.isInteresting();
+  if (addrExpr) {
+    _sym_push_path_constraint(
+        _sym_build_equal(addrExpr,
+                        _sym_build_integer((uint64_t)addr, sizeof(addr) * 8)),
+        true, _sym_get_basic_block_id());
+    addrExpr = NULL;
+  }
+
+  // If the entire memory region is concrete, don't create a symbolic expression
+  // at all.
+  if (isConcrete(addr, length)) {
+    if (flags & 2) _sym_switch_fs_to_native();
+    return nullptr;
+  }
+
+  ReadOnlyShadow shadow(addr, length);
+  SymExpr res = std::accumulate(shadow.begin_non_null(), shadow.end_non_null(),
+                         static_cast<SymExpr>(nullptr),
+                         [&](SymExpr result, SymExpr byteExpr) {
+                           if (result == nullptr)
+                             return byteExpr;
+
+                           return little_endian
+                                      ? _sym_concat_helper(byteExpr, result)
+                                      : _sym_concat_helper(result, byteExpr);
+                         });
+
+
+#if HYBRID_DBG_CONSISTENCY_CHECK
+    // printf("Reading %ld bytes at %p\n", length, addr);
+    if (length <= 16) {
+        uint64_t expected_value;
+        switch (length) {
+            case 1:
+                expected_value = *((uint8_t*)addr);
+                break;
+            case 2:
+                expected_value = *((uint16_t*)addr);
+                break;
+            case 4:
+                expected_value = *((uint32_t*)addr);
+                break;
+            case 8:
+                expected_value = *((uint64_t*)addr);
+                break;
+            case 16:
+                if (res) {
+                  _sym_check_consistency(
+                    _sym_build_extract(res, 8, 8, 1), 
+                    *((uint64_t*)(addr + 8)), (uint64_t)addr);
+                  _sym_check_consistency(
+                    _sym_build_extract(res, 0, 8, 1), 
+                    *((uint64_t*)(addr)), (uint64_t)addr);
+                }
+                break;
+            default:
+                printf("READ SIZE: %ld\n", length);
+                assert(0 && "Unexpected read size");
+        }
+        if (length <= 8)
+          _sym_check_consistency(res, expected_value, (uint64_t)addr);
+    }
+#endif
+
+  if (flags & 2) _sym_switch_fs_to_native();
+  return res;
 }
 
-int _sym_expr_is_constant(SymExpr expr) {
-  return expr->isConstant();
+void _sym_debug_handle(void) {
+  printf("HERE\n");
+  return;
+}
+
+void _sym_write_memory(SymExpr addrExpr, uint8_t *addr, size_t length, SymExpr expr,
+                       uint8_t flags, uint64_t value) {
+  bool little_endian = flags & 1;
+  assert(length && "Invalid query for zero-length memory region");
+
+  if (flags & 2) _sym_switch_fs_to_emulation();
+
+#if 0
+  static int count = 0;
+  if (addr >= (uint8_t *)0x40007ff940UL && addr <= (uint8_t *)(0x40007ff940UL + 8)) {
+    printf("\n[%d] Writing %ld bytes at %p expr=%p\n\n", count++, length, addr, expr);
+  }
+#endif
+
+#if HYBRID_DBG_CONSISTENCY_CHECK
+    // printf("Writing %ld bytes at %p\n", length, addr);
+    if (length <= 8 && value != 0xDEADBEEFCAFECAFE) {
+      _sym_check_consistency(expr, value, (uint64_t)addr);
+    }
+#endif
+
+#ifdef DEBUG_RUNTIME
+  std::cerr << "Writing " << length << " bytes to address " << P(addr)
+            << std::endl;
+  dump_known_regions();
+#endif
+
+  if (addrExpr) {
+    _sym_push_path_constraint(
+        _sym_build_equal(addrExpr,
+                        _sym_build_integer((uint64_t)addr, sizeof(addr) * 8)),
+        true, _sym_get_basic_block_id());
+    addrExpr = NULL;
+  }
+
+  if (expr == nullptr && isConcrete(addr, length)) {
+    if (flags & 2) _sym_switch_fs_to_native();
+    return;
+  }
+
+  ReadWriteShadow shadow(addr, length);
+  if (expr == nullptr) {
+    for (auto shadowByte = shadow.begin(); shadowByte != shadow.end(); ++shadowByte)
+      shadowByte.writeByte(nullptr);
+  } else {
+    size_t i = 0;
+    for (auto shadowByte = shadow.begin(); 
+            shadowByte != shadow.end();
+            ++shadowByte) {
+      SymExpr byteExpr = little_endian
+                       ? _sym_extract_helper(expr, 8 * (i + 1) - 1, 8 * i)
+                       : _sym_extract_helper(expr, (length - i) * 8 - 1,
+                                             (length - i - 1) * 8);
+      shadowByte.writeByte(byteExpr);
+      i++;
+    }
+  }
+
+  if (flags & 2) _sym_switch_fs_to_native();
+}
+
+uintptr_t _sym_get_basic_block_id() {
+  return g_call_stack_manager.getLastVisitedBasicBlock();
+}
+
+void _sym_concretize_memory(uint8_t *addr, size_t length) {
+  while (length) {
+    uintptr_t start = pageStart((uintptr_t)addr);
+    size_t offset = pageOffset((uintptr_t)addr);
+    size_t n_left = kPageSize - offset;
+    size_t n = length > n_left ? n_left : length;
+    if(!isConcrete(addr, n)) {
+      ReadWriteShadow shadow(addr, n);
+      for (auto shadowByte = shadow.begin(); shadowByte != shadow.end(); ++shadowByte)
+        shadowByte.writeByte(nullptr);
+    }
+    addr += n;
+    length -= n;
+  }
 }
 
 SymExpr _sym_build_ite(SymExpr cond, SymExpr a, SymExpr b) {
   return registerExpression(g_expr_builder->createIte(
-      allocatedExpressions.at(cond),
-      allocatedExpressions.at(a),
-      allocatedExpressions.at(b)
+    allocatedExpressions.at(cond),
+    allocatedExpressions.at(a),
+    allocatedExpressions.at(b)
   ));
-}
-
-SymExpr _sym_build_array_read(void* updateList, SymExpr index) {
-  return registerExpression(
-      g_expr_builder->createArraySelect(allocatedExpressions.at(index), updateList));
 }
 
 void _sym_print_stack(void) {
   g_call_stack_manager.printStack();
+}
+
+void _sym_check_consistency(SymExpr expr, uint64_t expected_value, uint64_t addr) {
+#if HYBRID_DBG_CONSISTENCY_CHECK
+  if (expr == NULL) return;
+  int res = g_solver->checkConsistency(allocatedExpressions.at(expr), expected_value);
+  if (res == 0) {
+    uint64_t bb_id = _sym_get_basic_block_id();
+#if 0
+    if (bb_id == 0x15a33a0) {
+      return;
+    }
+#endif
+    printf("CONSISTENCY CHECK FAILED AT %lx\n", addr);
+    _sym_print_stack();
+    printf("BB ID: %lx\n", bb_id);
+    abort();
+  }
+#else
+  return;
+#endif
+}
+
+uintptr_t _sym_get_call_site() {
+  return g_call_stack_manager.getCurrentCall();
+}
+
+typedef uint64_t (*switch_fs_t)(void);
+
+extern "C" {
+  switch_fs_t switch_fs_to_native_ptr;
+  switch_fs_t switch_fs_to_emulation_ptr;
+}
+
+void _sym_switch_fs_to_native(void) {
+  switch_fs_to_native_ptr();
+}
+
+void _sym_switch_fs_to_emulation(void) {
+  switch_fs_to_emulation_ptr();
+}
+
+void _sym_add_exec_map(uint64_t start, uint64_t end, char* name) {
+  g_call_stack_manager.addExecMap(start, end, name);
 }

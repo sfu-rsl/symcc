@@ -24,8 +24,16 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str;
 use std::time::{Duration, Instant};
+use std::env;
+use nix::unistd;
+use nix::sys::stat;
+use std::thread;
+use std::io::Write;
+use std::process::Child;
+use nix::sys::signal::{self, Signal};
+use nix::unistd::Pid;
 
-const TIMEOUT: u32 = 90;
+const TIMEOUT: u128 = 90;
 
 /// Replace the first '@@' in the given command line with the input file.
 fn insert_input_file<S: AsRef<OsStr>, P: AsRef<Path>>(
@@ -84,24 +92,24 @@ impl AflMap {
             interesting = true;
         }
         else {
-            let mut data_counter = 0;
-            let mut diffs = 0;
+            // let mut data_counter = 0;
+            // let mut diffs = 0;
             for (known, new) in self.data.iter_mut().zip(other.data.iter()) {
-                data_counter += 1;
+                // data_counter += 1;
                 if *known != (*known | new) {
-                    diffs += 1;
+                    // diffs += 1;
                     *known |= new;
                     interesting = true;
                 }
             }
-            println!("Data counter: {dc}", dc=data_counter);
-            println!("Diffs: {di}", di=diffs);
+            // println!("Data counter: {dc}", dc=data_counter);
+            // println!("Diffs: {di}", di=diffs);
         }
         if interesting {
-            println!("is interesting");
+            // println!("is interesting");
         }
         else {
-            println!("Is not interesting");
+            // println!("Is not interesting");
         }
         interesting
     }
@@ -254,6 +262,9 @@ pub struct AflConfig {
 
     /// The fuzzer instance's queue of test cases.
     queue: PathBuf,
+    own_queue: Option<PathBuf>,
+
+    aflmap_lib: bool
 }
 
 /// Possible results of afl-showmap.
@@ -264,11 +275,13 @@ pub enum AflShowmapResult {
     Hang,
     /// The target crashed.
     Crash,
+    /// afl-showmap crashed
+    Failure,
 }
 
 impl AflConfig {
     /// Read the AFL configuration from a fuzzer instance's output directory.
-    pub fn load(fuzzer_output: impl AsRef<Path>) -> Result<Self> {
+    pub fn load(fuzzer_output: impl AsRef<Path>, output: impl AsRef<Path>) -> Result<Self> {
         let afl_stats_file_path = fuzzer_output.as_ref().join("fuzzer_stats");
         let mut afl_stats_file = File::open(&afl_stats_file_path).with_context(|| {
             format!(
@@ -295,11 +308,23 @@ impl AflConfig {
             .trim()
             .split_whitespace()
             .collect();
-        let afl_target_command: Vec<_> = afl_command
+        let mut afl_target_command: Vec<_> = afl_command
             .iter()
             .skip_while(|s| **s != "--")
             .map(OsString::from)
             .collect();
+
+        let mut aflmap_lib = false;
+        let mut qemu_mode = afl_command.contains(&"-Q".into());
+        if let Ok(_) = env::var("SYMCC_AFLMAP_LIB") {
+            if !qemu_mode {
+                // FIXME: specific to our setup 
+                afl_target_command[1] = OsString::from(afl_target_command[1].clone().into_string().unwrap().replace(".afl", ".symqemu"));
+                qemu_mode = true;
+                aflmap_lib = true;
+            }
+        }
+
         let afl_binary_dir = Path::new(
             afl_command
                 .get(0)
@@ -308,18 +333,26 @@ impl AflConfig {
         .parent()
         .unwrap();
 
+        let mut own_queue = None;
+        if let Ok(_) = env::var("SYMCC_PICK_FROM_OWN_QUEUE") { 
+            own_queue = Some(output.as_ref().join("queue"));
+        }
+
         Ok(AflConfig {
             show_map: afl_binary_dir.join("afl-showmap"),
             use_standard_input: !afl_target_command.contains(&"@@".into()),
-            use_qemu_mode: afl_command.contains(&"-Q".into()),
+            use_qemu_mode: qemu_mode,
             target_command: afl_target_command,
             queue: fuzzer_output.as_ref().join("queue"),
+            own_queue: own_queue,
+            aflmap_lib: aflmap_lib
         })
     }
 
     /// Return the most promising unseen test case of this fuzzer.
     pub fn best_new_testcase(&self, seen: &HashSet<PathBuf>) -> Result<Option<PathBuf>> {
-        let best = fs::read_dir(&self.queue)
+
+        let fuzzer_queue = fs::read_dir(&self.queue)
             .with_context(|| {
                 format!(
                     "Failed to open the fuzzer's queue at {}",
@@ -333,10 +366,38 @@ impl AflConfig {
                     self.queue.display()
                 )
             })?
-            .into_iter()
-            .map(|entry| entry.path())
-            .filter(|path| path.is_file() && !seen.contains(path))
-            .max_by_key(|path| TestcaseScore::new(path));
+            .into_iter();
+
+        let best;
+        match &self.own_queue { 
+            Some(q) => {
+                let own_queue = fs::read_dir(q)
+                    .with_context(|| {
+                        format!(
+                            "Failed to open the fuzzer's queue at {}",
+                            self.queue.display()
+                        )
+                    })?
+                    .collect::<io::Result<Vec<_>>>()
+                    .with_context(|| {
+                        format!(
+                            "Failed to read the fuzzer's queue at {}",
+                            self.queue.display()
+                        )
+                    })?
+                    .into_iter();
+                best = fuzzer_queue.chain(own_queue)
+                    .map(|entry| entry.path())
+                    .filter(|path| path.is_file() && !seen.contains(path))
+                    .max_by_key(|path| TestcaseScore::new(path));
+            },
+            None => {
+                best = fuzzer_queue
+                    .map(|entry| entry.path())
+                    .filter(|path| path.is_file() && !seen.contains(path))
+                    .max_by_key(|path| TestcaseScore::new(path));
+            }
+        }
 
         Ok(best)
     }
@@ -350,8 +411,12 @@ impl AflConfig {
         if self.use_qemu_mode {
             afl_show_map.arg("-Q");
         }
+        if self.aflmap_lib {
+            afl_show_map.env("AFL_INST_LIBS", "1");
+            afl_show_map.env_remove("AFL_MAP_SIZE");
+        }
         afl_show_map
-            .args(&["-t", "5000", "-m", "none", "-b", "-o"])
+            .args(&["-t", "10000", "-m", "none", "-b", "-o"])
             .arg(testcase_bitmap.as_ref())
             .args(insert_input_file(&self.target_command, &testcase))
             .stdout(Stdio::null())
@@ -366,40 +431,74 @@ impl AflConfig {
         let mut afl_show_map_child = afl_show_map.spawn().context("Failed to run afl-showmap")?;
 
         if self.use_standard_input {
-            io::copy(
-                &mut File::open(&testcase)?,
-                afl_show_map_child
-                    .stdin
-                    .as_mut()
-                    .expect("Failed to open the stardard input of afl-showmap"),
-            )
-            .context("Failed to pipe the test input to afl-showmap")?;
+            // NOTE: a program may quit before reading the entire input...
+            //       we have to handle this scenario.
+            let mut f = File::open(&testcase).expect("Cannot open testcase");
+            let metadata = fs::metadata(&testcase).expect("unable to read metadata of testcase");
+            let writer = afl_show_map_child
+                .stdin
+                .as_mut()
+                .expect("Failed to open the stardard input of afl-showmap");
+            for i in 0..metadata.len() {
+                let mut buffer = vec![0; 1];
+                f.read(&mut buffer).expect("buffer overflow");
+                match writer.write(&buffer) {
+                    Ok(_) => {
+                        // println!("Written byte {}", i);
+                    }
+                    Err(e) => {
+                        if i == 0 {
+                            panic!("Cannot write any byte to the pipe: {}", e)
+                        } else {
+                            log::warn!("Error after writing {} bytes into the pipe: {}", i, e);
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         let afl_show_map_status = afl_show_map_child
             .wait()
             .context("Failed to wait for afl-showmap")?;
         log::debug!("afl-showmap returned {}", &afl_show_map_status);
-        match afl_show_map_status
-            .code()
-            .expect("No exit code available for afl-showmap")
-        {
-            0 => {
-                let map = AflMap::load(&testcase_bitmap).with_context(|| {
-                    format!(
-                        "Failed to read the AFL bitmap that \
-                         afl-showmap should have generated at {}",
-                        testcase_bitmap.as_ref().display()
-                    )
-                })?;
-                Ok(AflShowmapResult::Success(Box::new(map)))
+        match afl_show_map_status.code() {
+            Some(code) => match code {
+                0 => {
+                    let map = AflMap::load(&testcase_bitmap).with_context(|| {
+                        format!(
+                            "Failed to read the AFL bitmap that \
+                             afl-showmap should have generated at {}",
+                            testcase_bitmap.as_ref().display()
+                        )
+                    })?;
+                    Ok(AflShowmapResult::Success(Box::new(map)))
+                }
+                1 => Ok(AflShowmapResult::Hang),
+                2 => Ok(AflShowmapResult::Crash),
+                unexpected => panic!("Unexpected return code {} from afl-showmap", unexpected),
+            }, 
+            None => {
+                log::debug!("No exit status for afl-showmap");
+                Ok(AflShowmapResult::Failure)
             }
-            1 => Ok(AflShowmapResult::Hang),
-            2 => Ok(AflShowmapResult::Crash),
-            unexpected => panic!("Unexpected return code {} from afl-showmap", unexpected),
         }
     }
 }
+
+fn as_u16_le(array: &[u8; 2]) -> u32 {
+    ((array[0] as u32) <<  0) +
+    ((array[1] as u32) <<  8)
+}
+
+fn as_i32_le(array: &[u8; 4]) -> i32 {
+    ((array[0] as i32) <<  0) +
+    ((array[1] as i32) <<  8) +
+    ((array[2] as i32) << 16) +
+    ((array[3] as i32) << 24)
+}
+
+
 
 /// The run-time configuration of SymCC.
 #[derive(Debug)]
@@ -415,6 +514,15 @@ pub struct SymCC {
 
     /// The command to run.
     command: Vec<OsString>,
+
+    /// Pipes used for communicating with the forkserver
+    pipe_read_path: PathBuf,
+    pipe_write_path: PathBuf,
+    child_pid: PathBuf,
+    child_exit_status: PathBuf,
+    pub pipe_read: Option<File>,
+    pub pipe_write: Option<File>,
+    pub forkserver: Option<Child>
 }
 
 /// The result of executing SymCC.
@@ -433,12 +541,64 @@ impl SymCC {
     /// Create a new SymCC configuration.
     pub fn new(output_dir: PathBuf, command: &[String]) -> Self {
         let input_file = output_dir.join(".cur_input");
+        let fifo_path_read = output_dir.join("pipe_read");
+        let fifo_path_write = output_dir.join("pipe_write");
 
         SymCC {
             use_standard_input: !command.contains(&String::from("@@")),
             bitmap: output_dir.join("bitmap"),
             command: insert_input_file(command, &input_file),
-            input_file,
+            input_file: input_file,
+            pipe_read_path: fifo_path_read,
+            pipe_write_path: fifo_path_write,
+            child_pid: output_dir.join("workdir").join("pid"),
+            child_exit_status: output_dir.join("workdir").join("done"),
+            pipe_read: None,
+            pipe_write: None,
+            forkserver: None
+        }
+    }
+
+    pub fn initialize_pipes(&mut self, output_dir: &PathBuf) {
+        if let Ok(_) = env::var("SYMFUSION_FORKSERVER") { 
+            /*
+            let output = Command::new("ls")
+                .arg(&output_dir)
+                .output()
+                .expect("failed to execute process");
+            println!("Output: {}", String::from_utf8(output.stdout).unwrap());
+            */
+            match unistd::mkfifo(&self.pipe_read_path, stat::Mode::S_IRWXU) {
+                Ok(_) => println!("created {:?}", self.pipe_read_path),
+                Err(err) => println!("Error creating fifo {:?}: {}", self.pipe_read_path, err),
+            }
+            match unistd::mkfifo(&self.pipe_write_path, stat::Mode::S_IRWXU) {
+                Ok(_) => println!("created {:?}", self.pipe_write_path),
+                Err(err) => println!("Error creating fifo {:?}: {}", self.pipe_write_path, err),
+            }
+
+            let file_env_var = if self.use_standard_input { "SYMCC_INPUT_STDIN_FILE" } else { "SYMCC_INPUT_FILE" }; 
+
+            // println!("{:?}", self.command);
+            let _cmd_len = self.command.len();
+            let forkserver = Command::new("setsid") // &self.command[0]
+                .args(&self.command) // &self.command[1..cmd_len]
+                .env("SYMFUSION_PATH_FORKSERVER_DONE", &self.child_exit_status)
+                .env("SYMFUSION_FORKSERVER_PIPE_WRITE", &self.pipe_read_path)
+                .env("SYMFUSION_FORKSERVER_PIPE_READ", &self.pipe_write_path)
+                .env("SYMFUSION_PATH_FORKSERVER_PID", &self.child_pid)
+                .env("SYMCC_ENABLE_LINEARIZATION", "1")
+                .env("SYMCC_AFL_COVERAGE_MAP", &self.bitmap)
+                .env("SYMCC_OUTPUT_DIR", output_dir.join("workdir"))
+                .env(file_env_var, &self.input_file)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .stdin(Stdio::null())
+                .spawn().unwrap();
+            self.forkserver = Some(forkserver);
+            self.pipe_write = Some(File::create(&self.pipe_write_path).unwrap());
+            self.pipe_read = Some(File::open(&self.pipe_read_path).unwrap());
+            // thread::sleep(Duration::from_secs(5));
         }
     }
 
@@ -471,7 +631,7 @@ impl SymCC {
     /// result. However, the mechanism that the backend uses to report solver
     /// time is somewhat brittle.
     pub fn run(
-        &self,
+        &mut self,
         input: impl AsRef<Path>,
         output_dir: impl AsRef<Path>,
     ) -> Result<SymCCResult> {
@@ -490,61 +650,153 @@ impl SymCC {
             )
         })?;
 
-        let mut analysis_command = Command::new("timeout");
-        analysis_command
-            .args(&["-k", "1", &TIMEOUT.to_string()])
-            .args(&self.command)
-            .env("SYMCC_ENABLE_LINEARIZATION", "1")
-            .env("SYMCC_AFL_COVERAGE_MAP", &self.bitmap)
-            .env("SYMCC_OUTPUT_DIR", output_dir.as_ref())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped()); // capture SMT logs
-
-        if self.use_standard_input {
-            analysis_command.stdin(Stdio::piped());
-        } else {
-            analysis_command.stdin(Stdio::null());
-            analysis_command.env("SYMCC_INPUT_FILE", &self.input_file);
-        }
-
-        log::debug!("Running SymCC as follows: {:?}", &analysis_command);
+        let mut killed = false;
+        let solver_time;
+        let total_time;
         let start = Instant::now();
-        let mut child = analysis_command.spawn().context("Failed to run SymCC")?;
 
-        if self.use_standard_input {
-            io::copy(
-                &mut File::open(&self.input_file).with_context(|| {
-                    format!(
-                        "Failed to read the test input at {}",
-                        self.input_file.display()
-                    )
-                })?,
-                child
-                    .stdin
-                    .as_mut()
-                    .expect("Failed to pipe to the child's standard input"),
-            )
-            .context("Failed to pipe the test input to SymCC")?;
-        }
-
-        let result = child
-            .wait_with_output()
-            .context("Failed to wait for SymCC")?;
-        let total_time = start.elapsed();
-        let killed = match result.status.code() {
-            Some(code) => {
-                log::debug!("SymCC returned code {}", code);
-                (code == 124) || (code == -9) // as per the man-page of timeout
-            }
-            None => {
-                let maybe_sig = result.status.signal();
-                if let Some(signal) = maybe_sig {
-                    log::warn!("SymCC received signal {}", signal);
+        match &mut self.pipe_write {
+            Some(pipe) => {
+                match pipe.write_all(&[0x23]) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        log::warn!("Cannot write in the pipe with forkserver: {:?}", e);
+                    }
                 }
-                maybe_sig.is_some()
-            }
-        };
+                let wait_time_usecs = 200;
+                let pid;
+                loop {
+                    match std::fs::metadata(&self.child_pid) {
+                        Ok(metadata) => {
+                            let mut f = File::open(&self.child_pid).expect("no file found");
+                            let s = metadata.len();
+                            if s == 4 {
+                                let mut buffer : [u8; 4] = [0; 4];
+                                f.read(&mut buffer).expect("buffer overflow");
+                                pid = as_i32_le(&buffer);
+                                log::info!("Child PID: {}", pid);
+                                fs::remove_file(&self.child_pid)?;
+                                break;
+                            }
+                        },
+                        Err(_) => {
+                            thread::sleep(Duration::from_micros(wait_time_usecs));
+                        }
+                    }
+                    if start.elapsed().as_millis() > (TIMEOUT * 1000) {
+                        log::warn!("No info about the child pid... timeout is passed!");
+                        thread::sleep(Duration::from_micros(wait_time_usecs * 10));
+                    }
+                }
+                loop {
+                    match std::fs::metadata(&self.child_exit_status) {
+                        Ok(metadata) => {
+                            let mut f = File::open(&self.child_exit_status).expect("no file found");
+                            let s = metadata.len();
+                            if s == 4 {
+                                let mut buffer : [u8; 4] = [0; 4];
+                                f.read(&mut buffer).expect("buffer overflow");
+                                let signal = as_u16_le(&[buffer[2], buffer[3]]);
+                                let status_code = as_u16_le(&[buffer[0], buffer[1]]);
+                                log::info!("Child exit status: {}", status_code);
+                                fs::remove_file(&self.child_exit_status)?;
+                                if signal > 0 {
+                                    log::warn!("SymCC received signal {}", signal);
+                                    killed = true;
+                                }
+                                break;
+                            }
+                        },
+                        Err(_) => {
+                            thread::sleep(Duration::from_micros(wait_time_usecs));
+                        }
+                    }
+                    if start.elapsed().as_millis() > (TIMEOUT * 1000) {
+                        if !killed {
+                            log::warn!("Killing child due to timeout");
+                            match signal::kill(Pid::from_raw(pid), Signal::SIGKILL) {
+                                Ok(_) => {},
+                                Err(e) => {
+                                    log::warn!("Failed to kill child. Already dead? {:?}", e);
+                                }
+                            }
+                            killed = true;
+                        }
+                    }
+                }
+                total_time = start.elapsed();
+                solver_time = None;
+            },
+            None => {
+                // setsid is needed to avoid some programs
+                // from reading from /dev/tty
+                let mut analysis_command = Command::new("setsid");
+                analysis_command
+                    .args(&["timeout", "-k", "1", &TIMEOUT.to_string()])
+                    .args(&self.command)
+                    .env("SYMCC_ENABLE_LINEARIZATION", "1")
+                    .env("SYMCC_AFL_COVERAGE_MAP", &self.bitmap)
+                    .env("SYMCC_OUTPUT_DIR", output_dir.as_ref())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::piped())
+                    ; // capture SMT logs
 
+                if self.use_standard_input {
+                    analysis_command.stdin(Stdio::piped());
+                } else {
+                    analysis_command.stdin(Stdio::null());
+                    analysis_command.env("SYMCC_INPUT_FILE", &self.input_file);
+                }
+            
+                log::debug!("Running SymCC as follows: {:?}", &analysis_command);
+
+                let mut child = analysis_command.spawn().context("Failed to run SymCC")?;
+                if self.use_standard_input {
+                    let pipe_stdin = child.stdin.as_mut().unwrap();
+                    let r = io::copy(
+                        &mut File::open(&self.input_file).with_context(|| {
+                            format!(
+                                "Failed to read the test input at {}",
+                                self.input_file.display()
+                            )
+                        })?,
+                        pipe_stdin,
+                    );
+                    match r {
+                        Ok(_) => {},
+                        Err(e) => {
+                            log::warn!("Error when sending data through pipe: {:?}", e);
+                        }
+                    }
+                }
+
+                let result = child
+                    .wait_with_output()
+                    .context("Failed to wait for SymCC")?;
+
+                total_time = start.elapsed();
+
+                killed = match result.status.code() {
+                    Some(code) => {
+                        log::debug!("SymCC returned code {}", code);
+                        (code == 124) || (code == -9) // as per the man-page of timeout
+                    }
+                    None => {
+                        let maybe_sig = result.status.signal();
+                        if let Some(signal) = maybe_sig {
+                            log::warn!("SymCC received signal {} [time={}]", signal, start.elapsed().as_secs());
+                        }
+                        maybe_sig.is_some()
+                    }
+                };
+
+                solver_time = SymCC::parse_solver_time(result.stderr);
+                if solver_time.is_some() && solver_time.unwrap() > total_time {
+                    log::warn!("Backend reported inaccurate solver time!");
+                }
+            }
+        }
+        
         let new_tests = fs::read_dir(&output_dir)
             .with_context(|| {
                 format!(
@@ -562,11 +814,6 @@ impl SymCC {
             .iter()
             .map(|entry| entry.path())
             .collect();
-
-        let solver_time = SymCC::parse_solver_time(result.stderr);
-        if solver_time.is_some() && solver_time.unwrap() > total_time {
-            log::warn!("Backend reported inaccurate solver time!");
-        }
 
         Ok(SymCCResult {
             test_cases: new_tests,

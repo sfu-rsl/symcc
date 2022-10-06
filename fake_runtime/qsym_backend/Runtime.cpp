@@ -21,6 +21,8 @@
 
 void _sym_initialize(void) {}
 void _sym_initialize_qemu(void) {}
+void _sym_pre_initialize_qemu(void) {}
+void _sym_finalize(void) {}
 SymExpr _sym_build_integer(uint64_t value, uint8_t bits) { return NULL; }
 SymExpr _sym_build_integer128(uint64_t high, uint64_t low) { return NULL; }
 SymExpr _sym_build_null_pointer() { return NULL; }

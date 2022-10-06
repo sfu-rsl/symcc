@@ -44,6 +44,7 @@ Runtime::Runtime(Module &M) {
   buildInteger = import(M, "_sym_build_integer", ptrT, IRB.getInt64Ty(), int8T);
   buildInteger128 = import(M, "_sym_build_integer128", ptrT, IRB.getInt64Ty(),
                            IRB.getInt64Ty());
+  buildValueFromMemory = import(M, "_sym_build_value_from_memory", intPtrType, int8T);
   buildFloat =
       import(M, "_sym_build_float", ptrT, IRB.getDoubleTy(), IRB.getInt1Ty());
   buildNullPointer = import(M, "_sym_build_null_pointer", ptrT);
@@ -150,27 +151,32 @@ Runtime::Runtime(Module &M) {
 
 #undef LOAD_COMPARISON_HANDLER
 
-  memcpy = import(M, "_sym_memcpy", voidT, ptrT, ptrT, intPtrType);
-  memset = import(M, "_sym_memset", voidT, ptrT, ptrT, intPtrType);
-  memmove = import(M, "_sym_memmove", voidT, ptrT, ptrT, intPtrType);
+  buildInsert =
+      import(M, "_sym_build_insert", ptrT, ptrT, ptrT, IRB.getInt64Ty(), int8T);
+  buildExtract = import(M, "_sym_build_extract", ptrT, ptrT, IRB.getInt64Ty(),
+                        IRB.getInt64Ty(), int8T);
+
+  // memory
   readMemory =
       import(M, "_sym_read_memory", ptrT, ptrT, intPtrType, intPtrType, int8T);
   writeMemory = import(M, "_sym_write_memory", voidT, ptrT, intPtrType, intPtrType,
                        ptrT, int8T, IRB.getInt64Ty());
-  buildExtract = import(M, "_sym_build_extract", ptrT, ptrT, IRB.getInt64Ty(),
-                        IRB.getInt64Ty(), int8T);
+  concretizeMemory = import(M, "_sym_concretize_memory", voidT, intPtrType, intPtrType);
 
+  // events
   notifyCall = import(M, "_sym_notify_call", voidT, intPtrType);
   notifyRet = import(M, "_sym_notify_ret", voidT, intPtrType);
   notifyBasicBlock = import(M, "_sym_notify_basic_block", voidT, intPtrType);
 
-  printPathConstraints = import(M, "_sym_print_path_constraints", voidT);
-  debugFunctionAfterReturn = import(M, "_sym_debug_function_after_return", voidT, ptrT);
-
+  // models
+  memcpy = import(M, "_sym_memcpy", voidT, ptrT, ptrT, intPtrType);
+  memset = import(M, "_sym_memset", voidT, ptrT, ptrT, intPtrType);
+  memmove = import(M, "_sym_memmove", voidT, ptrT, ptrT, intPtrType);
   LibcMemset = import(M, "_sym_libc_memset", voidT, ptrT, int8T, IRB.getInt64Ty());
   LibcMemcpy = import(M, "_sym_libc_memcpy", voidT, ptrT, ptrT, IRB.getInt64Ty());
   LibcMemmove = import(M, "_sym_libc_memmove", voidT, ptrT, ptrT, IRB.getInt64Ty());
 
+  // indirect call handling
   wrapIndirectCallInt1 = import(M, "_sym_wrap_indirect_call_int", IRB.getInt1Ty(), IRB.getInt64Ty());
   wrapIndirectCallInt8 = import(M, "_sym_wrap_indirect_call_int", IRB.getInt8Ty(), IRB.getInt64Ty());
   wrapIndirectCallInt16 = import(M, "_sym_wrap_indirect_call_int", IRB.getInt16Ty(), IRB.getInt64Ty());
@@ -181,21 +187,28 @@ Runtime::Runtime(Module &M) {
   wrapIndirectCallArgInt = import(M, "_sym_indirect_call_set_arg_int", voidT, int8T, IRB.getInt64Ty(), int8T);
   wrapIndirectCallArgCount = import(M, "_sym_indirect_call_set_arg_count", voidT, int8T);
   checkIndirectCallTarget = import(M, "_sym_check_indirect_call_target", voidT, IRB.getInt64Ty());
-  vaListStart = import(M, "_sym_va_list_start", voidT, ptrT);
-  concretizeMemory = import(M, "_sym_concretize_memory", voidT, intPtrType, intPtrType);
 
+  // variadic args
+  vaListStart = import(M, "_sym_va_list_start", voidT, ptrT);
+
+  // debugging
   checkConsistency = import(M, "_sym_check_consistency", voidT, ptrT, IRB.getInt64Ty(), IRB.getInt64Ty());
+
+  switchFsRegisterToNative = import(M, "_sym_switch_fs_to_native", voidT);
+  switchFsRegisterToEmulation = import(M, "_sym_switch_fs_to_emulation", voidT);
 }
 
 /// Decide whether a function is called symbolically.
 bool isInterceptedFunction(const Function &f) {
   static const StringSet<> kInterceptedFunctions = {
     // safe to run models instead of the actual user implementation
+#if 1
     "memcpy", "memset", "strncpy", "strchr",
     "memcmp",   "memmove", "ntohl", "strncmp", "bcmp",
     "strcmp", "strlen"
+#endif
     // these are not safe (e.g., they allocate blocks) to run
-    // natively. We handle them during emulation.
+    // natively. We must handle them during emulation.
     /*
       "malloc",   "calloc",  "mmap",    "mmap64", "open",   "read",    "lseek",
       "lseek64",  "fopen",   "fopen64", "fread",  "fseek",  "fseeko",  "rewind",

@@ -1,4 +1,4 @@
 [submodule "qsym_backend/qsym"]
 	path = runtime/qsym_backend/qsym
-	url = https://github.com/season-lab/qsym-hybrid.git
-	branch = hybrid
+	url = https://github.com/season-lab/symfusion-qsym.git
+	branch = symfusion

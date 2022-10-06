@@ -50,9 +50,17 @@ SymExpr _sym_build_bswap(SymExpr expr) { return NULL; }
 void _sym_register_expression_region(SymExpr *start, size_t length) {}
 void _sym_print_path_constraints(void) {}
 void _sym_debug_function_after_return(uint8_t *addr) {}
-void _sym_libc_memset(uint8_t *s, int c, size_t n) {}
-void _sym_libc_memcpy(void *dest, const void *src, size_t n) {}
-void _sym_libc_memmove(void *dest, const void *src, size_t n) {}
+
+void _sym_libc_memset(uint8_t *s, int c, size_t n) {
+    memset(s, c, n);
+}
+void _sym_libc_memcpy(void *dest, const void *src, size_t n) {
+    memcpy(dest, src, n);
+}
+void _sym_libc_memmove(void *dest, const void *src, size_t n) {
+    memmove(dest, src, n);
+}
+
 uint64_t _sym_wrap_indirect_call_int(uint64_t target) { 
   uint64_t res;
   switch (g_function_arguments_concrete_count) {
@@ -131,3 +139,11 @@ SymExpr _sym_build_ite(SymExpr cond, SymExpr a, SymExpr b) { return nullptr; }
 SymExpr _sym_build_array_read(void* updateList, SymExpr index) { return nullptr; }
 void _sym_concretize_memory(uint8_t *addr, size_t length) {}
 void _sym_print_stack(void) {}
+
+SymExpr _sym_build_insert(SymExpr target, SymExpr to_insert, uint64_t offset,
+                          bool little_endian) { return nullptr; }
+
+void _sym_switch_fs_to_native(void) {}
+void _sym_switch_fs_to_emulation(void) {}
+void _sym_add_exec_map(uint64_t start, uint64_t end, char* name) {}
+SymExpr _sym_build_value_from_memory(uint8_t *addr, size_t length) { return nullptr; }

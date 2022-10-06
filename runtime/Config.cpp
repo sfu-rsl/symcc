@@ -45,6 +45,32 @@ void loadConfig() {
   if (fullyConcrete != nullptr)
     g_config.fullyConcrete = checkFlagString(fullyConcrete);
 
+  auto *pathTracerMode = getenv("SYMFUSION_PATH_TRACER");
+  if (pathTracerMode != nullptr) {
+    g_config.pathTracerMode = checkFlagString(pathTracerMode);
+    if (g_config.pathTracerMode) {
+      g_config.fullyConcrete = true;
+      g_config.bitmapTraceMainEdges = getenv("SYMFUSION_BITMAP_TRACE_EDGE_MAIN");
+      g_config.bitmapMainEdges = getenv("SYMFUSION_BITMAP_VIRGIN_EDGE_MAIN");
+      g_config.bitmapTraceAllEdges = getenv("SYMFUSION_BITMAP_TRACE_EDGE_ALL");
+      g_config.bitmapAllEdges = getenv("SYMFUSION_BITMAP_VIRGIN_EDGE_ALL");
+      g_config.bitmapMainPath = getenv("SYMFUSION_BITMAP_VIRGIN_PATH_MAIN");
+      g_config.bitmapAllPath = getenv("SYMFUSION_BITMAP_VIRGIN_PATH_ALL");
+
+      auto *bitmapSize = getenv("SYMFUSION_BITMAP_SIZE");
+      if (bitmapSize)
+        g_config.bitmapSize = std::stol(bitmapSize);
+    }
+  }
+
+  auto *cexCacheDir = getenv("SYMFUSION_CEX_CACHE_DIR");
+  if (cexCacheDir != nullptr)
+    g_config.cexCacheDir = cexCacheDir;
+
+  auto *avoidCacheDir = getenv("SYMFUSION_AVOID_CACHE_DIR");
+  if (avoidCacheDir != nullptr)
+    g_config.avoidCacheDir = avoidCacheDir;
+
   auto *outputDir = getenv("SYMCC_OUTPUT_DIR");
   if (outputDir != nullptr)
     g_config.outputDir = outputDir;

@@ -20,6 +20,7 @@
 #include <llvm/IR/InstVisitor.h>
 #include <llvm/IR/ValueMap.h>
 #include <llvm/Support/raw_ostream.h>
+#include <optional>
 
 #include "Runtime.h"
 
@@ -125,6 +126,7 @@ public:
   void visitFPToUI(llvm::FPToUIInst &I);
   void visitCastInst(llvm::CastInst &I);
   void visitPHINode(llvm::PHINode &I);
+  void visitInsertValueInst(llvm::InsertValueInst &I);
   void visitExtractValueInst(llvm::ExtractValueInst &I);
   void visitSwitchInst(llvm::SwitchInst &I);
   void visitUnreachableInst(llvm::UnreachableInst &);
@@ -193,25 +195,25 @@ private:
   /// Create an expression that represents the concrete value.
   llvm::CallInst *createValueExpression(llvm::Value *V, llvm::IRBuilder<> &IRB);
 
+  bool isArgInteger(llvm::Value *V) {
+    llvm::Type* type = V->getType();
+    bool is_int = type->isIntegerTy() || type->isPointerTy(); 
+    // if (!is_int)
+    //  llvm::errs() << "Type: " << *type << " is_int=" << is_int << "\n";
+    return is_int;
+  }
+
+  bool isTypeInteger(llvm::Type *type) {
+    bool is_int = type->isIntegerTy() || type->isPointerTy(); 
+    if (!is_int)
+      llvm::errs() << "Type: " << *type << " is_int=" << is_int << "\n";
+    return is_int;
+  }
+
   /// Get the (already created) symbolic expression for a value.
   llvm::Value *getSymbolicExpression(llvm::Value *V) {
     auto exprIt = symbolicExpressions.find(V);
     return (exprIt != symbolicExpressions.end()) ? exprIt->second : nullptr;
-  }
-
-  bool isArgInteger(llvm::Value *V) {
-    llvm::Type* type = V->getType();
-    bool is_int = type->isIntegerTy() || type->isPointerTy(); 
-    if (!is_int)
-      llvm::errs() << "Type: " << *type << " is_int=" << is_int << "\n";
-    return is_int;
-  }
-
-   bool isTypeInteger(llvm::Type *type) {
-    bool is_int = type->isIntegerTy() || type->isPointerTy(); 
-    if (!is_int)
-      llvm::errs() << "Type: " << *type << " is_int=" << is_int << "\n";
-    return is_int;
   }
 
   llvm::Value *getSymbolicExpressionOrNull(llvm::Value *V) {
@@ -306,6 +308,10 @@ private:
     return llvm::ConstantInt::get(intPtrType,
                                   reinterpret_cast<uint64_t>(pointer));
   }
+
+  /// Compute the offset of a member in a (possibly nested) aggregate.
+  uint64_t aggregateMemberOffset(llvm::Type *aggregateType,
+                                 llvm::ArrayRef<unsigned> indices) const;
 
   const Runtime runtime;
 

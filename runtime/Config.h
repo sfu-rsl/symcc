@@ -21,11 +21,30 @@ struct Config {
   /// Should we allow symbolic data in the program?
   bool fullyConcrete = false;
 
+  /// Path tracer mode?
+  bool pathTracerMode = false;
+  int bitmapSize = -1;
+  char* bitmapTraceMainEdges = nullptr;
+  char* bitmapTraceAllEdges = nullptr;
+  char* bitmapMainEdges = nullptr;
+  char* bitmapAllEdges = nullptr;
+  char* bitmapMainPath = nullptr;
+  char* bitmapAllPath = nullptr;
+
+  /// The cex cache directory.
+  std::string cexCacheDir = "";
+
+  /// The avoid cache directory.
+  std::string avoidCacheDir = "";
+
   /// The directory for storing new outputs.
   std::string outputDir = "/tmp/output";
 
   /// The input file, if any.
   std::string inputFile;
+
+  /// The number of bytes in the input
+  size_t inputSize;
 
   /// The file to log constraint solving information to.
   std::string logFile = "";
