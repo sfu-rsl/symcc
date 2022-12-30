@@ -787,44 +787,25 @@ void Symbolizer::visitPHINode(PHINode &I) {
   symbolicExpressions[&I] = exprPHI;
 }
 
-void Symbolizer::visitInsertValueInst(InsertValueInst &I) {
-  IRBuilder<> IRB(&I);
-  auto target = I.getAggregateOperand();
-  auto insertedValue = I.getInsertedValueOperand();
-  auto insertedValueType = insertedValue->getType();
+void Symbolizer::visitExtractValueInst(ExtractValueInst &I) {
+  uint64_t offset = 0;
+  auto *indexedType = I.getAggregateOperand()->getType();
+  for (auto index : I.indices()) {
+    // All indices in an extractvalue instruction are constant:
+    // https://llvm.org/docs/LangRef.html#extractvalue-instruction
 
-  if (getSymbolicExpression(target) == nullptr &&
-      getSymbolicExpression(insertedValue) == nullptr)
-    return;
-
-  auto insertedValueExpr = getSymbolicExpressionOrNull(insertedValue);
-
-  // Floating-point values are a distinct kind in the solver, so we need to
-  // convert them to bit vectors before we can insert them into the expression
-  // for the aggregate.
-  Input symbolicInput;
-  if (insertedValueType->isFloatingPointTy()) {
-    auto floatConversion = IRB.CreateCall(
-        runtime.buildFloatToBits,
-        {insertedValueExpr, IRB.getInt1(insertedValueType->isDoubleTy())});
-    symbolicInput = {insertedValue, 0, floatConversion};
-    insertedValueExpr = floatConversion;
+    if (auto *structType = dyn_cast<StructType>(indexedType)) {
+      offset += dataLayout.getStructLayout(structType)->getElementOffset(index);
+      indexedType = structType->getElementType(index);
+    } else {
+      auto *arrayType = cast<ArrayType>(indexedType);
+      unsigned elementSize =
+          dataLayout.getTypeAllocSize(arrayType->getArrayElementType());
+      offset += elementSize * index;
+      indexedType = arrayType->getArrayElementType();
+    }
   }
 
-  auto result = IRB.CreateCall(
-      runtime.buildInsert,
-      {getSymbolicExpressionOrNull(target), insertedValueExpr,
-       IRB.getInt64(aggregateMemberOffset(target->getType(), I.getIndices())),
-       IRB.getInt8(isLittleEndian(insertedValueType) ? 1 : 0)});
-
-  if (!insertedValueType->isFloatingPointTy())
-    symbolicInput = {insertedValue, 1, result};
-
-  registerSymbolicComputation(
-      {symbolicInput.user, result, {{target, 0, result}, symbolicInput}}, &I);
-}
-
-void Symbolizer::visitExtractValueInst(ExtractValueInst &I) {
   IRBuilder<> IRB(&I);
   auto target = I.getAggregateOperand();
   auto targetExpr = getSymbolicExpression(target);

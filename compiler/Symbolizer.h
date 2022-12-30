@@ -126,7 +126,6 @@ public:
   void visitFPToUI(llvm::FPToUIInst &I);
   void visitCastInst(llvm::CastInst &I);
   void visitPHINode(llvm::PHINode &I);
-  void visitInsertValueInst(llvm::InsertValueInst &I);
   void visitExtractValueInst(llvm::ExtractValueInst &I);
   void visitSwitchInst(llvm::SwitchInst &I);
   void visitUnreachableInst(llvm::UnreachableInst &);

@@ -149,8 +149,6 @@ Runtime::Runtime(Module &M) {
   writeMemory = import(M, "_sym_write_memory", voidT, intPtrType, intPtrType,
                        ptrT, int8T);
   buildZeroBytes = import(M, "_sym_build_zero_bytes", ptrT, intPtrType);
-  buildInsert =
-      import(M, "_sym_build_insert", ptrT, ptrT, ptrT, IRB.getInt64Ty(), int8T);
   buildExtract = import(M, "_sym_build_extract", ptrT, ptrT, IRB.getInt64Ty(),
                         IRB.getInt64Ty(), int8T);
 
