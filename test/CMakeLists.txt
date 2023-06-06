@@ -14,6 +14,8 @@
 
 if (QSYM_BACKEND)
   set(SYM_TEST_FILECHECK_ARGS "--check-prefix=QSYM --check-prefix=ANY")
+elseif(NOOP_BACKEND)
+  set(SYM_TEST_FILECHECK_ARGS "--check-prefix=NOOP --check-prefix=ANY")
 else()
   set(SYM_TEST_FILECHECK_ARGS "--check-prefix=SIMPLE --check-prefix=ANY")
 endif()
