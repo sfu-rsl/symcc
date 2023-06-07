@@ -4,16 +4,25 @@
 #include <chrono>
 #endif
 
+#include <atomic>
 #include <iostream>
 
 #include "Config.h"
 #include "LibcWrappers.h"
 #include "Shadow.h"
 
+namespace {
+  /// Indicate whether the runtime has been initialized.
+  std::atomic_flag g_initialized = ATOMIC_FLAG_INIT;
+}
+
 /*
  * Initialization
  */
 void _sym_initialize(void) {
+  if (g_initialized.test_and_set())
+    return;
+
   loadConfig();
   initLibcWrappers();
   
